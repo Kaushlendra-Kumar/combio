@@ -13,14 +13,20 @@ type CardHandle struct {
 }
 
 type OpponentView struct {
-	ID             PlayerID     `json:"id"`
-	Seat           int          `json:"seat"`
-	Cards          []CardHandle `json:"cards"`
-	Count          int          `json:"count"`
-	PendingPenalty int          `json:"pending_penalty"`
-	Connected      bool         `json:"connected"`
-	Removed        bool         `json:"removed"`
-	TurnsCompleted int          `json:"turns_completed"`
+	ID    PlayerID     `json:"id"`
+	Seat  int          `json:"seat"`
+	Cards []CardHandle `json:"cards"`
+	// Version is this layout's revision. A client sends it back with a match
+	// attempt so the server can tell "the card you clicked has already gone"
+	// (stale, free) apart from "you were wrong about that card" (a penalty).
+	// It carries no card identity: it only counts how often the hand changed,
+	// which is already visible from the public event feed.
+	Version        uint64 `json:"version"`
+	Count          int    `json:"count"`
+	PendingPenalty int    `json:"pending_penalty"`
+	Connected      bool   `json:"connected"`
+	Removed        bool   `json:"removed"`
+	TurnsCompleted int    `json:"turns_completed"`
 }
 
 // PlayerView is the only thing that should ever be serialised to a client.
@@ -30,6 +36,8 @@ type PlayerView struct {
 
 	MyCards        []CardHandle `json:"my_cards"`
 	MyPendingCount int          `json:"my_pending_count"`
+	// MyVersion is my own layout revision; see OpponentView.Version.
+	MyVersion uint64 `json:"my_version"`
 
 	Opponents []OpponentView `json:"opponents"`
 
@@ -96,12 +104,14 @@ func (s *State) ViewFor(me PlayerID) PlayerView {
 		if p.ID == me {
 			v.MyCards = s.handles(p)
 			v.MyPendingCount = len(p.PendingPenalty)
+			v.MyVersion = p.Layout.Version()
 			continue
 		}
 		v.Opponents = append(v.Opponents, OpponentView{
 			ID:             p.ID,
 			Seat:           p.Seat,
 			Cards:          s.handles(p),
+			Version:        p.Layout.Version(),
 			Count:          p.Layout.Len(),
 			PendingPenalty: len(p.PendingPenalty),
 			Connected:      p.Connected,

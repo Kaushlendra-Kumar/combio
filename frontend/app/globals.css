@@ -1,0 +1,26 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-display: ui-rounded, "Segoe UI", system-ui, sans-serif;
+}
+
+html,
+body {
+  min-height: 100%;
+}
+
+body {
+  background:
+    radial-gradient(circle at 50% 0%, #2b6650 0%, #1f4d3d 45%, #143026 100%) fixed;
+  color: #f7f7f5;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+/* Visible focus everywhere: the game is fully keyboard playable. */
+:focus-visible {
+  outline: 2px solid #fcd34d;
+  outline-offset: 2px;
+}

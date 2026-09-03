@@ -355,3 +355,113 @@ func TestRemovingTheCurrentFinalTurnPlayer(t *testing.T) {
 		t.Fatalf("status is %s", tb.room.Snapshot().Status)
 	}
 }
+
+// The layout version exists so a real client can tell a lost race from a wrong
+// guess. Phase 4 found that a browser had no way to obtain one, so a race loser
+// was charged 2 penalty cards instead of being told "stale". These two tests
+// pin both halves of that.
+
+// Without a version (what a client had to send before the view exposed one) the
+// loser is judged against whatever card now occupies that index.
+func TestRaceLoserWithoutAVersionIsJudgedAgainstTheNewCard(t *testing.T) {
+	tb := raceSetup(t)
+	// b1 hands over their 9C, so the slot the loser clicked now holds a card
+	// of the wrong rank.
+	winner, _ := json.Marshal(map[string]any{
+		"target": "c1", "target_index": 0, "give_index": 1,
+	})
+	loser, _ := json.Marshal(map[string]any{
+		"target": "c1", "target_index": 0, "give_index": 0, // no version
+	})
+	tb.resetAll()
+	tb.room.Act("b1", protocol.ActionData{Kind: protocol.AAttemptOpponentMatch, Args: winner}, "r")
+	tb.settle()
+	tb.room.Act("d1", protocol.ActionData{Kind: protocol.AAttemptOpponentMatch, Args: loser}, "r")
+	tb.settle()
+
+	// Documented, not desired: with no version to send, the loser of a race is
+	// judged against whatever card now sits at that index and is charged for
+	// it. This is precisely why the view exposes a version.
+	if code := tb.client("d1").lastErrorCode(); code != "" {
+		t.Fatalf("expected a silent wrong match, got %q", code)
+	}
+	tb.stateOf(func(s *engine.State) {
+		if n := len(s.Player("d1").PendingPenalty); n != 2 {
+			t.Fatalf("expected the version-less loser to be penalised, got %d cards", n)
+		}
+	})
+}
+
+// With the version taken from the view, the loser is correctly stale and free.
+func TestRaceLoserUsingTheViewVersionIsStaleAndFree(t *testing.T) {
+	tb := raceSetup(t)
+
+	// Exactly what a browser has: its own PlayerView.
+	st := tb.room.CloneState()
+	bView := st.ViewFor("b1")
+	dView := st.ViewFor("d1")
+
+	versionOf := func(v engine.PlayerView, id engine.PlayerID) uint64 {
+		for _, o := range v.Opponents {
+			if o.ID == id {
+				return o.Version
+			}
+		}
+		t.Fatalf("%s is not in the view", id)
+		return 0
+	}
+	bVer, dVer := versionOf(bView, "c1"), versionOf(dView, "c1")
+	if bVer == 0 || bVer != dVer {
+		t.Fatalf("both clients should see the same layout version, got %d and %d", bVer, dVer)
+	}
+
+	tb.resetAll()
+	for _, actor := range []engine.PlayerID{"b1", "d1"} {
+		args, _ := json.Marshal(map[string]any{
+			"target": "c1", "target_index": 0, "target_version": bVer, "give_index": 0,
+		})
+		tb.room.Act(actor, protocol.ActionData{Kind: protocol.AAttemptOpponentMatch, Args: args}, "r")
+		tb.settle()
+	}
+
+	if got := len(tb.client("b1").errors()); got != 0 {
+		t.Fatalf("the winner should not have been refused: %v", tb.client("b1").errors())
+	}
+	if code := tb.client("d1").lastErrorCode(); code != "stale" {
+		t.Fatalf("the race loser got %q, want stale", code)
+	}
+	tb.stateOf(func(s *engine.State) {
+		if n := len(s.Player("d1").PendingPenalty); n != 0 {
+			t.Fatalf("the race loser was charged %d penalty cards", n)
+		}
+	})
+}
+
+// The version says nothing about any card. It is a revision counter.
+func TestLayoutVersionCarriesNoCardIdentity(t *testing.T) {
+	tb := raceSetup(t)
+	st := tb.room.CloneState()
+	v := st.ViewFor("b1")
+
+	if v.MyVersion == 0 {
+		t.Fatal("my own layout version should be exposed too")
+	}
+	for _, o := range v.Opponents {
+		if o.Version == 0 {
+			t.Fatalf("%s has no layout version", o.ID)
+		}
+		if o.Version > 1000 {
+			t.Fatalf("%s's version looks like a card id, not a revision", o.ID)
+		}
+	}
+	// A version changes only when that layout changes.
+	before := v.MyVersion
+	tb.act("b1", protocol.AAttemptOwnMatch, map[string]any{"index": 0})
+	st = tb.room.CloneState()
+	if after := st.ViewFor("b1").MyVersion; after <= before {
+		t.Fatalf("the version did not advance after a change: %d -> %d", before, after)
+	}
+	if after := st.ViewFor("a1").MyVersion; after != v.Opponents[0].Version && v.Opponents[0].ID == "a1" {
+		t.Fatal("an untouched layout's version should not move")
+	}
+}
