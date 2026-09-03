@@ -1,0 +1,10 @@
+# build output
+/backend/bin/
+*.exe
+*.test
+*.out
+
+# editor noise
+.DS_Store
+.idea/
+.vscode/
