@@ -47,6 +47,7 @@ Two terminals:
 
 ```bash
 cd backend  && go run ./cmd/server --addr :8080
+#   (add --origins https://your.site to restrict browser origins)
 cd frontend && cp .env.example .env.local && npm install && npm run dev
 ```
 

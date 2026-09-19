@@ -28,6 +28,15 @@ type Options struct {
 	Dev    *auth.DevTokens // when set, exposes POST /auth/dev
 	Rooms  *room.Manager
 	Logger *log.Logger
+
+	// AllowedOrigins lists the browser origins permitted to call the HTTP
+	// endpoints. Empty means "any", which is what local development needs: the
+	// frontend runs on :3000 and the server on :8080, so every request from the
+	// page is cross-origin and would otherwise be unreadable to it.
+	//
+	// This is a development default. Locking it to the deployed origin belongs
+	// to the hardening phase, alongside the WebSocket upgrader's origin check.
+	AllowedOrigins []string
 }
 
 type Server struct {
@@ -51,7 +60,49 @@ func New(o Options) *Server {
 	return s
 }
 
-func (s *Server) Handler() http.Handler { return s.mux }
+// Handler is the HTTP entry point, wrapped so browsers can actually read the
+// responses.
+func (s *Server) Handler() http.Handler { return s.cors(s.mux) }
+
+func (s *Server) originAllowed(origin string) bool {
+	if len(s.opts.AllowedOrigins) == 0 {
+		return true // development default
+	}
+	for _, o := range s.opts.AllowedOrigins {
+		if o == "*" || strings.EqualFold(o, origin) {
+			return true
+		}
+	}
+	return false
+}
+
+// cors answers the browser's cross-origin rules.
+//
+// Without this the page gets a successful response it is not allowed to read,
+// which shows up in the console as an opaque "Failed to fetch" rather than as
+// anything resembling a CORS problem. No credentials are involved — the token
+// travels in the body and then in the WebSocket URL — so no
+// Access-Control-Allow-Credentials is set, and nothing here weakens the actor
+// authority model: the server still decides who a socket is.
+func (s *Server) cors(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if origin := r.Header.Get("Origin"); origin != "" {
+			w.Header().Add("Vary", "Origin")
+			if s.originAllowed(origin) {
+				w.Header().Set("Access-Control-Allow-Origin", origin)
+				w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+				w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+				w.Header().Set("Access-Control-Max-Age", "600")
+			}
+		}
+		// A preflight never reaches a route: answer it here and stop.
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
 
 func (s *Server) track(sess *session) bool {
 	s.mu.Lock()

@@ -498,3 +498,115 @@ func TestGracefulShutdown(t *testing.T) {
 		t.Fatalf("the second shutdown returned %v", err)
 	}
 }
+
+// ---------- browser cross-origin access ----------
+
+// The frontend runs on :3000 and the server on :8080, so every call from the
+// page is cross-origin. Without these headers the browser receives the token
+// and then refuses to hand it to JavaScript, which surfaces as an opaque
+// "Failed to fetch". Node's fetch does not enforce CORS, so only a test that
+// checks the headers explicitly catches this.
+func TestBrowserCanReadTheAuthResponseCrossOrigin(t *testing.T) {
+	h := newHarness(t)
+	const origin = "http://localhost:3000"
+
+	req, err := http.NewRequest(http.MethodPost, h.srv.URL+"/auth/dev?name=Ann", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Origin", origin)
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("auth returned %d", res.StatusCode)
+	}
+	if got := res.Header.Get("Access-Control-Allow-Origin"); got != origin {
+		t.Fatalf("Access-Control-Allow-Origin = %q; the browser would discard this response", got)
+	}
+	if !strings.Contains(res.Header.Get("Vary"), "Origin") {
+		t.Fatal("responses that depend on Origin must say so in Vary")
+	}
+	// A token really was issued.
+	var body struct {
+		Token string `json:"token"`
+	}
+	if err := json.NewDecoder(res.Body).Decode(&body); err != nil || body.Token == "" {
+		t.Fatalf("no token in the response: %v", err)
+	}
+}
+
+func TestPreflightIsAnswered(t *testing.T) {
+	h := newHarness(t)
+	req, err := http.NewRequest(http.MethodOptions, h.srv.URL+"/auth/dev", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Origin", "http://localhost:3000")
+	req.Header.Set("Access-Control-Request-Method", "POST")
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusNoContent {
+		t.Fatalf("preflight returned %d, want 204", res.StatusCode)
+	}
+	if !strings.Contains(res.Header.Get("Access-Control-Allow-Methods"), "POST") {
+		t.Fatal("preflight did not allow POST")
+	}
+	if res.Header.Get("Access-Control-Allow-Origin") == "" {
+		t.Fatal("preflight did not allow the origin")
+	}
+}
+
+// An explicit allow-list is honoured, and nothing is granted to an origin
+// outside it.
+func TestOriginAllowListIsEnforced(t *testing.T) {
+	dev := newDevAuth()
+	rooms := room.NewManager(room.ManagerOptions{Clock: room.NewFakeClock()})
+	s := New(Options{Dev: dev, Rooms: rooms, AllowedOrigins: []string{"https://combio.example"}})
+	h := serve(t, s, dev, rooms, nil)
+
+	check := func(origin string) string {
+		t.Helper()
+		req, err := http.NewRequest(http.MethodPost, h.srv.URL+"/auth/dev?name=Ann", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.Header.Set("Origin", origin)
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer res.Body.Close()
+		return res.Header.Get("Access-Control-Allow-Origin")
+	}
+
+	if got := check("https://combio.example"); got != "https://combio.example" {
+		t.Fatalf("an allowed origin got %q", got)
+	}
+	if got := check("https://evil.example"); got != "" {
+		t.Fatalf("a disallowed origin was granted %q", got)
+	}
+}
+
+// A request with no Origin header is not a browser, and gets no CORS headers.
+func TestNonBrowserRequestsAreUntouched(t *testing.T) {
+	h := newHarness(t)
+	res, err := http.Post(h.srv.URL+"/auth/dev?name=Ann", "application/json", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("status %d", res.StatusCode)
+	}
+	if res.Header.Get("Access-Control-Allow-Origin") != "" {
+		t.Fatal("a request without an Origin should not get CORS headers")
+	}
+}

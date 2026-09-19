@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -19,7 +20,18 @@ import (
 func main() {
 	addr := flag.String("addr", ":8080", "listen address")
 	seed := flag.Int64("seed", 0, "fixed deal seed for every room (0 = random per room)")
+	origins := flag.String("origins", "",
+		"comma-separated browser origins allowed to call the HTTP API (empty = any, for local dev)")
 	flag.Parse()
+
+	var allowed []string
+	if strings.TrimSpace(*origins) != "" {
+		for _, o := range strings.Split(*origins, ",") {
+			if o = strings.TrimSpace(o); o != "" {
+				allowed = append(allowed, o)
+			}
+		}
+	}
 
 	logger := log.New(os.Stdout, "combio ", log.LstdFlags)
 
@@ -28,7 +40,9 @@ func main() {
 		Timers: room.DefaultTimers(),
 		Seed:   *seed,
 	})
-	srv := server.New(server.Options{Dev: dev, Rooms: rooms, Logger: logger})
+	srv := server.New(server.Options{
+		Dev: dev, Rooms: rooms, Logger: logger, AllowedOrigins: allowed,
+	})
 
 	httpSrv := &http.Server{
 		Addr:              *addr,

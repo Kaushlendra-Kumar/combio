@@ -271,11 +271,36 @@ the PATH), `npm run build`.
 | Countdown | Not displayed; the protocol carries no deadline (§7) |
 | Auth | Development sign-in only. No password, no account, no expiry |
 | Persistence | Games live in server memory; a backend restart ends them |
-| Origin | The Go upgrader accepts any origin — a later hardening phase |
+| Origin | The HTTP API allows any browser origin by default, and the WebSocket upgrader accepts any origin. Pass `--origins` to lock the API down; the upgrader check belongs to the hardening phase |
 | Targeting | Every opponent card is clickable during a window. The server deliberately does not tell you what you remember, so targeting is from memory, as the rules intend |
 | Animation | Minimal (a pop and a slide). Nothing waits on an animation before applying an authoritative update |
 | Spectating | None |
 | Mobile | Usable and free of horizontal overflow; desktop is the primary target |
+
+---
+
+## 10b. Cross-origin access (found during first browser run)
+
+The page runs on `:3000` and the server on `:8080`, so every HTTP call from the
+browser is cross-origin. The server returned the token correctly but sent no
+`Access-Control-Allow-Origin`, so the browser refused to hand the response to
+JavaScript. In the UI that appears as a bare **"Failed to fetch"**, which names
+neither CORS nor the real cause.
+
+The integration suite missed it because Node's `fetch` does not enforce CORS —
+only a test that asserts on the response headers catches this class of bug.
+
+Fixed in `internal/server`: a small middleware sets
+`Access-Control-Allow-Origin` (echoing the request origin), `Allow-Methods`,
+`Allow-Headers`, `Max-Age` and `Vary: Origin`, and answers preflight `OPTIONS`
+with 204. No credentials are involved — the token travels in the body and then
+in the WebSocket URL — so `Allow-Credentials` is deliberately not set, and
+nothing about actor authority changes: the server still decides who a socket is.
+
+`Options.AllowedOrigins` (CLI `--origins`) restricts it. Empty means any, which
+is the local-development default and is documented as such. Four tests cover it:
+a browser-origin request, a preflight, an enforced allow-list, and a
+non-browser request getting no CORS headers at all.
 
 ---
 
@@ -294,5 +319,5 @@ Backend (regression after the additive change)
   gofmt -l .            clean
   go vet ./...          clean
   go test -race ./...   pass
-  go test ./...         277 tests/subtests, 0 failures, 0 skipped
+  go test ./...         281 tests/subtests, 0 failures, 0 skipped
 ```
