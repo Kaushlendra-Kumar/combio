@@ -266,3 +266,50 @@ describe("two browsers play against the real server", () => {
     bo.close();
   });
 });
+
+describe("declaring settles the hand immediately", () => {
+  it("ends the game, reveals every hand and refuses anything further", async () => {
+    const ann = await TestClient.connect(server, "Ann");
+    const bo = await TestClient.connect(server, "Bo");
+    await startGame(ann, bo);
+    await finishMemory(ann, bo);
+
+    // Play until COMBIO unlocks, which takes two complete rounds.
+    for (let i = 0; i < 30; i++) {
+      if (ann.state.view?.declare_available || bo.state.view?.declare_available) break;
+      const cur = whoseTurn([ann, bo]);
+      await cur.until(() => cur.state.view?.phase === "turn_start", "a fresh turn", 10_000);
+      cur.actions.drawCard();
+      await cur.until(() => cur.state.view?.phase === "draw_decision", "draw");
+      cur.actions.discardDrawn();
+      // Let the matching window and any power lapse on the server's timers.
+      await cur.until(() => cur.state.view?.phase === "turn_start", "the turn to end", 10_000);
+    }
+
+    const declarer = ann.state.view?.declare_available ? ann : bo;
+    const other = declarer === ann ? bo : ann;
+    expect(declarer.state.view?.declare_available).toBe(true);
+
+    declarer.actions.declareCombio();
+    await declarer.until(() => declarer.state.view?.finished === true, "the hand to settle");
+    await other.until(() => other.state.view?.finished === true, "the result");
+
+    // Both sides see the same finished result, with every hand revealed.
+    for (const c of [declarer, other]) {
+      const v = c.state.view!;
+      expect(v.finished).toBe(true);
+      expect(v.declared).toBe(true);
+      expect(v.declarer).toBe(declarer.playerId);
+      expect(Object.keys(v.reveal ?? {})).toHaveLength(2);
+      expect(Object.keys(v.scores ?? {})).toHaveLength(2);
+      expect((v.winners ?? []).length).toBeGreaterThan(0);
+    }
+
+    // Nobody gets a turn after a declaration.
+    other.actions.drawCard();
+    await other.until(() => other.lastErrorCode() === "game_over", "a refusal");
+
+    ann.close();
+    bo.close();
+  });
+});

@@ -31,12 +31,24 @@ export class Server {
     return `ws://127.0.0.1:${this.port}/ws`;
   }
 
-  async start(): Promise<void> {
+  /**
+   * Boots the real binary. Timers are shortened via the server's own flags so a
+   * test does not spend five real seconds on every matching window — the server
+   * still owns every transition, it just waits less.
+   */
+  async start(fastTimers = true): Promise<void> {
     const bin = path.join("/tmp", `combio-server-${this.port}`);
     await run("go", ["build", "-o", bin, "./cmd/server"], BACKEND);
-    this.proc = spawn(bin, ["--addr", `127.0.0.1:${this.port}`], {
-      stdio: ["ignore", "pipe", "pipe"],
-    });
+    const args = ["--addr", `127.0.0.1:${this.port}`];
+    if (fastTimers) {
+      args.push(
+        "--match-timer", "150ms",
+        "--match-extension", "50ms",
+        "--power-timer", "300ms",
+        "--turn-timer", "30s",
+      );
+    }
+    this.proc = spawn(bin, args, { stdio: ["ignore", "pipe", "pipe"] });
     await this.waitForHealth();
   }
 

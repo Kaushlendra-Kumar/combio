@@ -94,7 +94,6 @@ type gameStats struct {
 	zeroCardEnding  bool
 	negativeScore   bool
 	aceInFinalHand  bool
-	finalTurnMatch  bool
 	coWinners       bool
 	reshuffled      bool
 }
@@ -106,7 +105,6 @@ func (g *gameStats) merge(o gameStats) {
 	g.zeroCardEnding = g.zeroCardEnding || o.zeroCardEnding
 	g.negativeScore = g.negativeScore || o.negativeScore
 	g.aceInFinalHand = g.aceInFinalHand || o.aceInFinalHand
-	g.finalTurnMatch = g.finalTurnMatch || o.finalTurnMatch
 	g.coWinners = g.coWinners || o.coWinners
 	g.reshuffled = g.reshuffled || o.reshuffled
 }
@@ -136,9 +134,6 @@ func playRandomGameStats(t *testing.T, players int, cards int, seed int64) (Stat
 		s = ns
 		if HasEvent(evs, "deck_reshuffled") {
 			reshuffled = true
-		}
-		if s.Declared && HasEvent(evs, "match_accepted") {
-			stats.finalTurnMatch = true
 		}
 		if err := CheckInvariants(&s); err != nil {
 			t.Fatalf("invariant broken after %s: %v", a.Name(), err)
@@ -357,7 +352,6 @@ func TestFullGamesAcrossEveryTableSize(t *testing.T) {
 		{"successful declaration", all.declaredSuccess},
 		{"failed declaration", all.declaredFailed},
 		{"an Ace counted as -1 in a real final score", all.aceInFinalHand},
-		{"matching during the final-turn sequence", all.finalTurnMatch},
 		{"deck exhaustion and reshuffle", all.reshuffled},
 	} {
 		if !c.got {
@@ -369,9 +363,9 @@ func TestFullGamesAcrossEveryTableSize(t *testing.T) {
 	// zero-card declarers (TestTerminalPathZeroCardDeclarerWinsAndLoses),
 	// co-winners (TestTerminalPathCoWinnersAmongNonDeclarers) and negative
 	// totals (TestAceIsMinusOneEndToEnd).
-	t.Logf("paths covered: success=%v failed=%v declarerTie=%v zeroCardEnding=%v ace=%v negativeTotal=%v finalTurnMatch=%v coWinners=%v",
+	t.Logf("paths covered: success=%v failed=%v declarerTie=%v zeroCardEnding=%v ace=%v negativeTotal=%v coWinners=%v",
 		all.declaredSuccess, all.declaredFailed, all.declarerTied, all.zeroCardEnding,
-		all.aceInFinalHand, all.negativeScore, all.finalTurnMatch, all.coWinners)
+		all.aceInFinalHand, all.negativeScore, all.coWinners)
 }
 
 func TestApplyIsPureOnRejection(t *testing.T) {

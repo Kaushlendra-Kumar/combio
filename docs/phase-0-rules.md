@@ -91,7 +91,7 @@ Clockwise. On your turn, in order:
 - A matching window opens on **every game discard** (Option A removal, Option B discard) and on nothing else.
 - The card that opened the window sets the **active rank** and stays the visible top discard for the whole window.
 - **Windows never chain.** Cards thrown during a window — correct or incorrect — are buried in the pile and do not change the active rank or open a new window.
-- Every player may participate, including the player whose turn it is and including the COMBIO declarer during final turns.
+- Every player may participate, including the player whose turn it is.
 - **Multiple successful matches per player per window are allowed**, own cards and opponent cards, in any mix.
 - **Unlimited attempts per player per window**, including repeated wrong attempts.
 - Swaps (Queen/King) and transfers never open windows.
@@ -210,14 +210,28 @@ The COMBIO button's enabled state depends **exclusively** on: it is your turn, y
 
 ### Restrictions (unchanged)
 
-Cannot declare: after drawing, during another player's turn, during a matching window, after matching outside your turn, during power resolution, or during the final-turn sequence.
+Cannot declare: after drawing, during another player's turn, during a matching window, after matching outside your turn, or during power resolution.
 
 ### After declaration
 
-- Every other active player takes exactly **one** final normal turn, clockwise.
-- The declarer takes no further turn but **remains a full participant**: they may match during other players' windows, and they remain fully targetable — others can match away their cards, dump cards onto them via opponent-matching, and Queen/King-swap with them. Declaring is not protection; the declarer's score can move in either direction.
-- Nobody else may declare during the final-turn sequence.
-- Then reveal all layouts and score.
+**The hand ends immediately.** Every layout is revealed, scores are totalled and
+the winner is decided. Nobody takes another turn, no matching window opens, and
+no card moves after the declaration.
+
+This replaces the earlier rule, which gave every other active player one final
+turn before the reveal. That version was in the original rules document and in
+§10 of this one; it is superseded. The consequence is deliberate: the score you
+declare on is the score you are judged by, so a declaration is a bet on the
+table exactly as it stands.
+
+What that changes, in plain terms:
+
+- A declaration cannot be sabotaged. Opponents can no longer strip the
+  declarer's cards or hand them a King on the way out.
+- Declaring is stronger, because nobody can react. It still costs you the hand
+  if you tie or lose (§11), so it is a real risk, not a free move.
+- "The declarer remains targetable" no longer applies — there is no window in
+  which to target anyone.
 
 ---
 
@@ -323,7 +337,6 @@ Cards in a pending tray are not part of the layout: they cannot be targeted, mat
 - A card that is in a pending penalty tray cannot be targeted, matched, swapped or peeked.
 - The draw pile renders a single generic back (its top card's real deck colour is not exposed), while every card in a player's layout and the discard pile shows its true deck colour.
 - Deck colour of a face-down card is public and shown to all players — that is the entire point of two-toned decks.
-- The declarer may take part in matching windows during the final-turn sequence.
 - A player at 0 cards may declare on their turn like anyone else, scoring 0.
 
 ---

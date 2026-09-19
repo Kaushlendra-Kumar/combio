@@ -260,7 +260,7 @@ the PATH), `npm run build`.
 11. **Reconnect** — refresh a tab mid-game. The others show "paused"; the
     refreshed tab returns to its seat with its cards and any held card intact.
 12. **COMBIO** — the button appears only once the server unlocks it. Declare,
-    watch the final turns, and read the result screen.
+    and the hand settles immediately: every hand is revealed and scored.
 
 ---
 

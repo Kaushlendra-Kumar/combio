@@ -43,7 +43,6 @@ type PlayerView struct {
 
 	TurnPlayer PlayerID `json:"turn_player"`
 	MyTurn     bool     `json:"my_turn"`
-	FinalTurns bool     `json:"final_turns"`
 
 	DeckCount    int   `json:"deck_count"`
 	DiscardCount int   `json:"discard_count"`
@@ -86,7 +85,6 @@ func (s *State) ViewFor(me PlayerID) PlayerView {
 		Phase:        s.Phase.String(),
 		TurnPlayer:   s.CurrentID(),
 		MyTurn:       s.CurrentID() == me,
-		FinalTurns:   s.Declared,
 		DeckCount:    len(s.Deck),
 		DiscardCount: len(s.Discard),
 		ActiveRank:   s.ActiveRank,

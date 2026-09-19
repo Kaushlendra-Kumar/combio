@@ -170,7 +170,7 @@ func TestLifecycleReachesEveryStatus(t *testing.T) {
 	seen[tb.room.Snapshot().Status] = true // FINISHED
 
 	for _, want := range []Status{
-		StatusWaiting, StatusReady, StatusStarting, StatusPlaying, StatusFinalTurns, StatusFinished,
+		StatusWaiting, StatusReady, StatusStarting, StatusPlaying, StatusFinished,
 	} {
 		if !seen[want] {
 			t.Errorf("the lifecycle never reached %s", want)

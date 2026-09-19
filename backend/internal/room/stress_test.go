@@ -290,7 +290,7 @@ func playFullGame(t *testing.T, tb *table, withChaos, waitForReshuffle bool) {
 			if !reshuffled && sawReshuffle() {
 				reshuffled = true
 			}
-			ready := unlocked && info.Status != StatusFinalTurns
+			ready := unlocked && info.Status != StatusFinished
 			if waitForReshuffle && !reshuffled && step < 250 {
 				ready = false
 			}
@@ -473,8 +473,7 @@ func TestExhaustedDeckDoesNotFreezeTheRoom(t *testing.T) {
 	}
 	// And the players can still end the game themselves.
 	tb.act(string(tb.currentPlayer()), protocol.ADeclareCombio, nil)
-	if tb.room.Snapshot().Status != StatusFinalTurns &&
-		tb.room.Snapshot().Status != StatusFinished {
+	if tb.room.Snapshot().Status != StatusFinished {
 		t.Fatalf("a declaration should still be possible, status is %s",
 			tb.room.Snapshot().Status)
 	}
@@ -617,7 +616,7 @@ func TestRematchReturnsTheSameTableToTheLobby(t *testing.T) {
 		cur := string(tb.currentPlayer())
 		var unlocked bool
 		tb.stateOf(func(s *engine.State) { unlocked = s.DeclareUnlocked() })
-		if unlocked && tb.phase() == "turn_start" && tb.room.Snapshot().Status != StatusFinalTurns {
+		if unlocked && tb.phase() == "turn_start" && tb.room.Snapshot().Status != StatusFinished {
 			tb.act(cur, protocol.ADeclareCombio, nil)
 			continue
 		}
@@ -701,7 +700,7 @@ func TestRematchDropsDisconnectedSeats(t *testing.T) {
 		cur := string(tb.currentPlayer())
 		var unlocked bool
 		tb.stateOf(func(s *engine.State) { unlocked = s.DeclareUnlocked() })
-		if unlocked && tb.phase() == "turn_start" && tb.room.Snapshot().Status != StatusFinalTurns {
+		if unlocked && tb.phase() == "turn_start" && tb.room.Snapshot().Status != StatusFinished {
 			tb.act(cur, protocol.ADeclareCombio, nil)
 			continue
 		}

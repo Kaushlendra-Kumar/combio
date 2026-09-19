@@ -37,7 +37,6 @@ function view(over: Partial<PlayerView> = {}): PlayerView {
     ],
     turn_player: "u1",
     my_turn: true,
-    final_turns: false,
     deck_count: 30,
     discard_count: 2,
     discard_top: { id: 99, rank: 8, suit: 1, deck: 0 },

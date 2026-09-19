@@ -88,11 +88,14 @@ func TestDeclarationTimingRestrictions(t *testing.T) {
 	matching, _ := step(t, drawn, DiscardDrawn{Base: For("A")})
 	rejects(t, matching, DeclareCombio{Base: For("A")}, ErrWrongPhase)
 
+	// A declaration finishes the hand, so a second one has no game to land in.
 	declared, _ := step(t, s, DeclareCombio{Base: For("A")})
-	rejects(t, declared, DeclareCombio{Base: For("B")}, ErrAlreadyDeclared)
+	rejects(t, declared, DeclareCombio{Base: For("B")}, ErrGameOver)
 }
 
-func TestFinalTurnsThenReveal(t *testing.T) {
+// Declaring ends the hand on the spot: every layout is revealed and scored, and
+// nobody gets another turn.
+func TestDeclaringEndsTheHandImmediately(t *testing.T) {
 	s, err := BuildScenario(Scenario{
 		Players:    []PlayerID{"A", "B", "C"},
 		Hands:      map[PlayerID][]string{"A": {"AS"}, "B": {"5D"}, "C": {"7H"}},
@@ -104,60 +107,73 @@ func TestFinalTurnsThenReveal(t *testing.T) {
 		t.Fatal(err)
 	}
 	s, evs := step(t, s, DeclareCombio{Base: For("A")})
-	ts, _ := FindEvent(evs, "turn_started").(EvTurnStarted)
-	if ts.Player != "B" || !ts.FinalTurn {
-		t.Fatalf("final turns should start with B, got %+v", ts)
+
+	if !HasEvent(evs, "combio_declared") || !HasEvent(evs, "game_finished") {
+		t.Fatalf("declaring should declare and finish in one step, got %v", names(evs))
 	}
-	s = plainTurn(t, s, "B")
-	if s.Phase == PhaseFinished {
-		t.Fatal("C has not had a final turn yet")
+	if HasEvent(evs, "turn_started") {
+		t.Fatal("nobody gets a turn after a declaration")
 	}
-	if s.CurrentID() != "C" {
-		t.Fatalf("expected C, got %s", s.CurrentID())
-	}
-	s = plainTurn(t, s, "C")
 	if s.Phase != PhaseFinished {
-		t.Fatalf("game should be over, phase=%s", s.Phase)
+		t.Fatalf("phase = %s, want finished", s.Phase)
 	}
+	// A holds the only Ace, so A is strictly lowest.
 	if len(s.Winners) != 1 || s.Winners[0] != "A" {
-		t.Fatalf("A had -1 and should win, winners=%v", s.Winners)
+		t.Fatalf("winners = %v, want A", s.Winners)
 	}
+	if len(s.Scores) != 3 {
+		t.Fatalf("every active player should be scored, got %v", s.Scores)
+	}
+	fin, _ := FindEvent(evs, "game_finished").(EvGameFinished)
+	if len(fin.Reveal) != 3 {
+		t.Fatalf("every hand should be revealed, got %d", len(fin.Reveal))
+	}
+	if fin.DeclarationFailed {
+		t.Fatal("A's declaration should have succeeded")
+	}
+
+	// And the table is closed for business.
+	rejects(t, s, DrawCard{Base: For("B")}, ErrGameOver)
+	rejects(t, s, AttemptOwnMatch{Base: For("B"), Index: 0}, ErrGameOver)
+	rejects(t, s, DeclareCombio{Base: For("B")}, ErrGameOver)
 }
 
-func TestDeclarerRemainsTargetableDuringFinalTurns(t *testing.T) {
+func names(evs []Event) []string {
+	out := []string{}
+	for _, e := range evs {
+		out = append(out, e.EventName())
+	}
+	return out
+}
+
+// Nobody can touch the declarer's hand after a declaration, because there is no
+// window in which to do it. The score at the moment of declaring is the score.
+func TestNothingCanChangeTheScoreAfterADeclaration(t *testing.T) {
 	s, err := BuildScenario(Scenario{
 		Players:    []PlayerID{"A", "B"},
 		Hands:      map[PlayerID][]string{"A": {"AS", "2D"}, "B": {"KC", "8H"}},
-		Deck:       []string{"7C", "6C", "8D"}, // 8D drawn first, two left to pay penalties
+		Deck:       []string{"7C", "6C", "8D"},
 		DiscardTop: "9H",
 		Unlocked:   true,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
+	before := s.Score("A")
+	if before != 1 {
+		t.Fatalf("A should be on 1, got %d", before)
+	}
+
 	s, _ = step(t, s, DeclareCombio{Base: For("A")})
-	// B's final turn: discard an 8 and dump their King onto the declarer.
-	s, _ = step(t, s, DrawCard{Base: For("B")})
-	s, _ = step(t, s, DiscardDrawn{Base: For("B")})
-	s, evs := step(t, s, AttemptOpponentMatch{Base: For("B"), Target: "A", TargetIndex: 0, GiveIndex: 0})
-	if HasEvent(evs, "match_accepted") {
-		t.Fatal("A's Ace is not an 8; that attempt should fail")
+
+	if s.Scores["A"] != before {
+		t.Fatalf("A was scored %d, not the %d they declared on", s.Scores["A"], before)
 	}
-	// Now match B's own 8 out, then hand the declarer a King via a real target.
-	s, _ = step(t, s, AttemptOwnMatch{Base: For("B"), Index: 1})
-	if s.Player("B").Layout.Len() != 1 {
-		t.Fatalf("B should have discarded their 8, holds %d", s.Player("B").Layout.Len())
-	}
-	if len(s.Player("B").PendingPenalty) != 2 {
-		t.Fatal("B should be carrying the penalty from the failed attempt")
-	}
-	s, _ = step(t, s, TimerExpired{Kind: TimerMatchWindow})
-	if s.Phase != PhaseFinished {
-		t.Fatalf("phase = %s", s.Phase)
-	}
-	// The declarer was still exposed to everything during the final turn.
-	if _, ok := s.Scores["A"]; !ok {
-		t.Fatal("scores missing")
+	// B cannot draw, match, or target the declarer.
+	rejects(t, s, DrawCard{Base: For("B")}, ErrGameOver)
+	rejects(t, s, AttemptOpponentMatch{Base: For("B"), Target: "A", TargetIndex: 0, GiveIndex: 0}, ErrGameOver)
+	if len(s.Winners) != 1 || s.Winners[0] != "A" {
+		t.Fatalf("A declared on 1 against B's 21 and should win, got %v", s.Winners)
 	}
 }
 
@@ -226,7 +242,6 @@ func TestAceIsMinusOneEndToEnd(t *testing.T) {
 		t.Fatalf("zero cards should score 0, got %d", got)
 	}
 	s, _ = step(t, s, DeclareCombio{Base: For("A")})
-	s = plainTurn(t, s, "B")
 	if s.Phase != PhaseFinished {
 		t.Fatalf("phase = %s", s.Phase)
 	}

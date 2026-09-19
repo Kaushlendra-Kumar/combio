@@ -58,7 +58,7 @@ func All() []Scenario {
 		matchingRace(), wrongMatch(), multiMatch(), opponentTransfer(),
 		power10(), powerJack(), powerQueen(), powerKing(),
 		zeroCard(), combioSuccess(), combioFailure(), declarerTie(),
-		finalTurnTargeting(), disconnectRemoval(), reshuffle(), unlockInterrupted(),
+		declarationIsFinal(), disconnectRemoval(), reshuffle(), unlockInterrupted(),
 	}
 }
 
@@ -324,10 +324,10 @@ func combioSuccess() Scenario {
 			DiscardTop: "9H",
 			Unlocked:   true,
 		},
-		Steps: steps(
-			[]Step{{Note: "A declares before drawing", Action: engine.DeclareCombio{Base: p("A")}}},
-			plainTurn("B", "B takes their one final turn"),
-		),
+		Steps: []Step{
+			{Note: "A declares before drawing; the hand ends there and then",
+				Action: engine.DeclareCombio{Base: p("A")}},
+		},
 		Check: wantWinners("A"),
 	}
 }
@@ -343,10 +343,9 @@ func combioFailure() Scenario {
 			DiscardTop: "9H",
 			Unlocked:   true,
 		},
-		Steps: steps(
-			[]Step{{Note: "A gambles and declares", Action: engine.DeclareCombio{Base: p("A")}}},
-			plainTurn("B", "B's final turn"),
-		),
+		Steps: []Step{
+			{Note: "A gambles and declares", Action: engine.DeclareCombio{Base: p("A")}},
+		},
 		Check: wantWinners("B"),
 	}
 }
@@ -362,18 +361,17 @@ func declarerTie() Scenario {
 			DiscardTop: "9H",
 			Unlocked:   true,
 		},
-		Steps: steps(
-			[]Step{{Action: engine.DeclareCombio{Base: p("A")}}},
-			plainTurn("B", "B's final turn"),
-		),
+		Steps: []Step{
+			{Action: engine.DeclareCombio{Base: p("A")}},
+		},
 		Check: wantWinners("B"),
 	}
 }
 
-func finalTurnTargeting() Scenario {
+func declarationIsFinal() Scenario {
 	return Scenario{
-		Name: "final-turn-targeting",
-		Desc: "Declaring is not protection: B strips the declarer's 8 and hands back a King, turning a 7 into a 12.",
+		Name: "declaration-is-final",
+		Desc: "Declaring settles the hand instantly: nobody draws, nobody matches, and the score you declared on is the score you are judged by.",
 		Setup: engine.Scenario{
 			Players:    []engine.PlayerID{"A", "B"},
 			Hands:      map[engine.PlayerID][]string{"A": {"AS", "8H"}, "B": {"KC", "3D"}},
@@ -382,19 +380,18 @@ func finalTurnTargeting() Scenario {
 			Unlocked:   true,
 		},
 		Steps: []Step{
-			{Note: "A declares on 7 (Ace + 8)", Action: engine.DeclareCombio{Base: p("A")}},
-			{Note: "B's final turn: discard an 8 to open a rank-8 window",
-				Action: engine.DrawCard{Base: p("B")}},
-			{Action: engine.DiscardDrawn{Base: p("B")}},
-			{Note: "B knocks out the declarer's 8 and gives them the King instead",
-				Action: engine.AttemptOpponentMatch{Base: p("B"), Target: "A", TargetIndex: 1, GiveIndex: 0}},
-			{Action: engine.TimerExpired{Kind: engine.TimerMatchWindow}},
+			{Note: "A is holding Ace + 8 = 7; B is holding King + 3 = 16"},
+			{Note: "A declares", Action: engine.DeclareCombio{Base: p("A")}},
+			{Note: "B never gets another turn, so nothing can change either score"},
+			{Action: engine.DrawCard{Base: p("B")}, WantErr: engine.ErrGameOver},
+			{Action: engine.AttemptOpponentMatch{Base: p("B"), Target: "A", TargetIndex: 1, GiveIndex: 0},
+				WantErr: engine.ErrGameOver},
 		},
 		Check: func(s *engine.State) error {
-			if s.Scores["A"] != 12 || s.Scores["B"] != 3 {
-				return fmt.Errorf("scores %v, want A=12 B=3", s.Scores)
+			if s.Scores["A"] != 7 || s.Scores["B"] != 16 {
+				return fmt.Errorf("scores %v, want A=7 B=16", s.Scores)
 			}
-			return wantWinners("B")(s)
+			return wantWinners("A")(s)
 		},
 	}
 }

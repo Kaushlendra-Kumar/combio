@@ -60,7 +60,7 @@ func Board(v engine.PlayerView, names nameBook, private bool) string {
 	}
 	b.WriteString("\n")
 	if v.Declared {
-		fmt.Fprintf(&b, " COMBIO declared by %s — final turns in progress\n", names.of(v.Declarer))
+		fmt.Fprintf(&b, " COMBIO declared by %s\n", names.of(v.Declarer))
 	}
 	if v.Paused {
 		b.WriteString(" ** PAUSED — waiting for a reconnect **\n")
@@ -161,9 +161,6 @@ func Describe(e engine.Event, names nameBook) string {
 	case engine.EvMemoryPhaseEnded:
 		return "memory phase over — remember them"
 	case engine.EvTurnStarted:
-		if ev.FinalTurn {
-			return fmt.Sprintf("FINAL TURN: %s", names.of(ev.Player))
-		}
 		return fmt.Sprintf("turn: %s", names.of(ev.Player))
 	case engine.EvDeclareUnlocked:
 		return "two complete rounds played — COMBIO is now unlocked"

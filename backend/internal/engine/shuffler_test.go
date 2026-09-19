@@ -84,7 +84,6 @@ func TestFinishedViewRevealsEveryHand(t *testing.T) {
 		t.Fatal(err)
 	}
 	s, _ = step(t, s, DeclareCombio{Base: For("A")})
-	s = plainTurn(t, s, "B")
 	if s.Phase != PhaseFinished {
 		t.Fatalf("phase = %s", s.Phase)
 	}

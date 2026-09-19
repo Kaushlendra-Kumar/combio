@@ -150,7 +150,7 @@ zero-card              10 and Queen fizzle, Jack still works, keep and bluff
 combio-success         declarer strictly lowest
 combio-failure         declaration fails, declarer out of contention
 declarer-tie           a tie is not strictly lower
-final-turn-targeting   declaring is not protection: 7 becomes 12
+declaration-is-final   declaring settles the hand on the spot; nothing follows
 disconnect             pause, removal, cards sink to the pile bottom
 reshuffle              empty deck refilled, active card kept
 unlock-interrupted     removals never retroactively complete a round
@@ -178,7 +178,7 @@ in a few helpers.
 Manual runs completed:
 
 1. **Full game** — 2 seats (human + bot), seed 42: setup, memory phase, two
-   complete rounds, unlock, declaration, final turn, reveal, winner.
+   complete rounds, unlock, declaration, immediate reveal, winner.
 2. **Matching** — seed 13: a correct own-card match, a wrong throw with the
    +2 penalty, a penalty card placed by position sight unseen, the rest
    auto-appended at close.

@@ -323,7 +323,7 @@ func TestPlayResumesAfterRemovalAndTheFinalQueueIsCorrect(t *testing.T) {
 		}
 		var unlocked bool
 		tb.stateOf(func(s *engine.State) { unlocked = s.DeclareUnlocked() })
-		if unlocked && tb.phase() == "turn_start" && info.Status != StatusFinalTurns {
+		if unlocked && tb.phase() == "turn_start" && info.Status != StatusFinished {
 			tb.act(c, protocol.ADeclareCombio, nil)
 			continue
 		}
@@ -353,7 +353,7 @@ func TestGameCompletionNotifiesEveryone(t *testing.T) {
 		c := string(tb.currentPlayer())
 		var unlocked bool
 		tb.stateOf(func(s *engine.State) { unlocked = s.DeclareUnlocked() })
-		if unlocked && tb.phase() == "turn_start" && tb.room.Snapshot().Status != StatusFinalTurns {
+		if unlocked && tb.phase() == "turn_start" && tb.room.Snapshot().Status != StatusFinished {
 			tb.act(c, protocol.ADeclareCombio, nil)
 			continue
 		}

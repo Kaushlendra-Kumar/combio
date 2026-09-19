@@ -265,46 +265,84 @@ func TestPowerTimeoutSkipsThePower(t *testing.T) {
 	}
 }
 
-// After a declaration, removing a player who is still waiting for their final
-// turn must not stall the queue, hand out an extra turn, or skip anyone.
-func TestFinalTurnQueueSurvivesARemoval(t *testing.T) {
+// A declaration settles the hand in the room as well as the engine: the status
+// goes straight to FINISHED, everyone is told, and nothing further is accepted.
+func TestDeclarationFinishesTheRoomImmediately(t *testing.T) {
 	tb := newTable(t, 4, 4, 7)
 	tb.startGame(t)
-	tb.inject(t, engine.Scenario{
+	tb.room.ReplaceStateForTesting(mustScenario(t, engine.Scenario{
 		Players: []engine.PlayerID{"a1", "b1", "c1", "d1"},
 		Hands: map[engine.PlayerID][]string{
 			"a1": {"AS"}, "b1": {"5D"}, "c1": {"7H"}, "d1": {"9C"},
 		},
-		Deck:       []string{"2C", "3D", "4H", "6S", "2H", "3S", "4S", "6D"},
+		Deck:       []string{"2C", "3D", "4H", "6S"},
 		DiscardTop: "9H",
 		Unlocked:   true,
-	})
+	}))
+	tb.resetAll()
 
 	tb.act("a1", protocol.ADeclareCombio, nil)
-	if tb.room.Snapshot().Status != StatusFinalTurns {
-		t.Fatalf("status is %s", tb.room.Snapshot().Status)
-	}
-	if got := tb.currentPlayer(); got != "b1" {
-		t.Fatalf("final turns should start with b1, got %s", got)
-	}
 
-	// c1 drops out while waiting in the queue.
+	if got := tb.room.Snapshot().Status; got != StatusFinished {
+		t.Fatalf("status is %s, want FINISHED", got)
+	}
+	// Everyone gets the result, with every hand revealed.
+	for _, c := range tb.clients {
+		m, ok := c.last(protocol.SGameFinished)
+		if !ok {
+			t.Fatalf("%s never received the result", c.id)
+		}
+		d := m.Data.(protocol.GameFinishedData)
+		if len(d.View.Reveal) != 4 {
+			t.Fatalf("%s saw %d hands revealed, want 4", c.id, len(d.View.Reveal))
+		}
+		if len(d.View.Winners) != 1 || d.View.Winners[0] != "a1" {
+			t.Fatalf("winners = %v, want a1 who declared on an Ace", d.View.Winners)
+		}
+	}
+	// Nobody can play on.
+	tb.resetAll()
+	for _, id := range []string{"b1", "c1", "d1"} {
+		tb.act(id, protocol.ADrawCard, nil)
+		if code := tb.client(id).lastErrorCode(); code != "game_over" {
+			t.Fatalf("%s acting after the hand returned %q", id, code)
+		}
+	}
+	tb.stateOf(func(s *engine.State) {
+		if err := engine.CheckInvariants(s); err != nil {
+			t.Fatal(err)
+		}
+		if len(s.Scores) != 4 {
+			t.Fatalf("every player should be scored, got %v", s.Scores)
+		}
+	})
+	if got := tb.room.Stats().Conflicts; got != 0 {
+		t.Fatalf("engine.Apply overlapped %d times", got)
+	}
+}
+
+// A player who drops right before someone declares is out of contention; the
+// declaration still settles the hand for everyone left.
+func TestDeclarationAfterARemovalScoresOnlyTheSurvivors(t *testing.T) {
+	tb := newTable(t, 4, 4, 7)
+	tb.startGame(t)
+	tb.room.ReplaceStateForTesting(mustScenario(t, engine.Scenario{
+		Players: []engine.PlayerID{"a1", "b1", "c1", "d1"},
+		Hands: map[engine.PlayerID][]string{
+			"a1": {"AS"}, "b1": {"5D"}, "c1": {"7H"}, "d1": {"9C"},
+		},
+		Deck:       []string{"2C", "3D", "4H", "6S"},
+		DiscardTop: "9H",
+		Unlocked:   true,
+	}))
+
 	tb.room.Disconnected("c1")
 	tb.settle()
 	tb.advance(testTimers().Reconnect + time.Second)
 
-	took := []engine.PlayerID{}
-	for i := 0; i < 8 && tb.room.Snapshot().Status != StatusFinished; i++ {
-		cur := tb.currentPlayer()
-		took = append(took, cur)
-		tb.playPlainTurn(t, string(cur))
-	}
-
-	if tb.room.Snapshot().Status != StatusFinished {
-		t.Fatalf("the final queue stalled: %+v", tb.room.Snapshot())
-	}
-	if len(took) != 2 || took[0] != "b1" || took[1] != "d1" {
-		t.Fatalf("final turns were %v, want exactly [b1 d1]", took)
+	tb.act("a1", protocol.ADeclareCombio, nil)
+	if got := tb.room.Snapshot().Status; got != StatusFinished {
+		t.Fatalf("status is %s", got)
 	}
 	tb.stateOf(func(s *engine.State) {
 		if _, scored := s.Scores["c1"]; scored {
@@ -317,43 +355,6 @@ func TestFinalTurnQueueSurvivesARemoval(t *testing.T) {
 			t.Fatal(err)
 		}
 	})
-	// a1 declared on an Ace and nobody could beat -1.
-	if len(tb.room.Snapshot().Players) != 4 {
-		t.Fatal("seats should still be listed after the game")
-	}
-}
-
-// Removing the player whose final turn is in progress must hand the turn on,
-// not swallow it.
-func TestRemovingTheCurrentFinalTurnPlayer(t *testing.T) {
-	tb := newTable(t, 4, 4, 7)
-	tb.startGame(t)
-	tb.inject(t, engine.Scenario{
-		Players: []engine.PlayerID{"a1", "b1", "c1", "d1"},
-		Hands: map[engine.PlayerID][]string{
-			"a1": {"AS"}, "b1": {"5D"}, "c1": {"7H"}, "d1": {"9C"},
-		},
-		Deck:       []string{"2C", "3D", "4H", "6S", "2H", "3S"},
-		DiscardTop: "9H",
-		Unlocked:   true,
-	})
-	tb.act("a1", protocol.ADeclareCombio, nil)
-
-	tb.room.Disconnected("b1") // b1 was mid-final-turn
-	tb.settle()
-	tb.advance(testTimers().Reconnect + time.Second)
-
-	if got := tb.currentPlayer(); got != "c1" {
-		t.Fatalf("the turn should pass to c1, got %s", got)
-	}
-	tb.playPlainTurn(t, "c1")
-	if got := tb.currentPlayer(); got != "d1" {
-		t.Fatalf("d1 must not be skipped, got %s", got)
-	}
-	tb.playPlainTurn(t, "d1")
-	if tb.room.Snapshot().Status != StatusFinished {
-		t.Fatalf("status is %s", tb.room.Snapshot().Status)
-	}
 }
 
 // The layout version exists so a real client can tell a lost race from a wrong

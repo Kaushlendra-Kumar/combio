@@ -9,65 +9,39 @@ import (
 
 // ---- 7. the declarer is fully exposed during final turns ----
 
-func TestFinalTurnOpponentMatchRewritesTheDeclarersScore(t *testing.T) {
+// Under the current rule a declaration is settled on the spot, so the score you
+// declare on is the score you are judged by. This is the test that would fail
+// first if final turns ever came back.
+func TestTheDeclaredScoreIsTheFinalScore(t *testing.T) {
 	s, err := BuildScenario(Scenario{
 		Players:    []PlayerID{"A", "B"},
 		Hands:      map[PlayerID][]string{"A": {"AS", "8H"}, "B": {"KC", "3D"}},
-		Deck:       []string{"7C", "6C", "8D"}, // 8D drawn first
+		Deck:       []string{"7C", "6C", "8D"},
 		DiscardTop: "9H",
 		Unlocked:   true,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	ace := s.Player("A").Layout.Cards()[0]
-	eight := s.Player("A").Layout.Cards()[1]
-	king := s.Player("B").Layout.Cards()[0]
-
-	// A declares holding A♠ + 8♥ = 7.
-	if s.Score("A") != 7 {
-		t.Fatalf("setup: A scores %d", s.Score("A"))
-	}
-	s, _ = step(t, s, DeclareCombio{Base: For("A")})
-
-	// B's final turn: discard an 8, then use remembered knowledge to strip the
-	// declarer's 8 and hand them the King instead.
-	s, _ = step(t, s, DrawCard{Base: For("B")})
-	s, _ = step(t, s, DiscardDrawn{Base: For("B")})
-	s, evs := step(t, s, AttemptOpponentMatch{
-		Base: For("B"), Target: "A", TargetIndex: 1, GiveIndex: 0,
-	})
-	if !HasEvent(evs, "match_accepted") || !HasEvent(evs, "card_transferred") {
-		t.Fatal("B should have removed the declarer's 8")
+	declaredOn, opponent := s.Score("A"), s.Score("B")
+	if declaredOn != 7 || opponent != 16 {
+		t.Fatalf("setup: A=%d B=%d", declaredOn, opponent)
 	}
 
-	got := s.Player("A").Layout.Cards()
-	if len(got) != 2 || got[0] != ace || got[1] != king {
-		t.Fatalf("A's layout = %v, want [ace king] with the King in the vacated slot", s.Hand("A"))
-	}
-	if s.Player("A").Layout.Contains(eight) {
-		t.Fatal("the declarer's 8 should be out of play")
-	}
-	// A went from 7 to -1 + 13 = 12; B went from 16 to 3.
-	if s.Score("A") != 12 {
-		t.Fatalf("A now scores %d, want 12", s.Score("A"))
-	}
-	if s.Score("B") != 3 {
-		t.Fatalf("B now scores %d, want 3", s.Score("B"))
-	}
+	s, evs := step(t, s, DeclareCombio{Base: For("A")})
 
-	s, _ = step(t, s, TimerExpired{Kind: TimerMatchWindow})
-	if s.Phase != PhaseFinished {
-		t.Fatalf("phase = %s", s.Phase)
+	if s.Scores["A"] != declaredOn || s.Scores["B"] != opponent {
+		t.Fatalf("scores moved after the declaration: %v", s.Scores)
 	}
-	// Scoring must use the MODIFIED layout, so the declaration fails.
-	if s.Scores["A"] != 12 || s.Scores["B"] != 3 {
-		t.Fatalf("final scores %v, want A=12 B=3", s.Scores)
+	if len(s.Winners) != 1 || s.Winners[0] != "A" {
+		t.Fatalf("A declared on 7 against 16 and should win, got %v", s.Winners)
 	}
-	fin, _ := FindEvent([]Event{}, "").(EvGameFinished)
-	_ = fin
-	if len(s.Winners) != 1 || s.Winners[0] != "B" {
-		t.Fatalf("winners = %v, want B (A's declaration was sabotaged)", s.Winners)
+	fin, _ := FindEvent(evs, "game_finished").(EvGameFinished)
+	if fin.DeclarationFailed {
+		t.Fatal("the declaration should have stood")
+	}
+	if len(fin.Reveal["B"]) != 2 {
+		t.Fatal("B's hand should be revealed in full")
 	}
 }
 
@@ -228,8 +202,6 @@ func TestTerminalPathCoWinnersAmongNonDeclarers(t *testing.T) {
 		t.Fatal(err)
 	}
 	s, _ = step(t, s, DeclareCombio{Base: For("A")})
-	s = plainTurn(t, s, "B")
-	s = plainTurn(t, s, "C")
 	if s.Phase != PhaseFinished {
 		t.Fatalf("phase = %s", s.Phase)
 	}
@@ -253,7 +225,6 @@ func finishTwoHanded(t *testing.T, aHand, bHand []string) State {
 		t.Fatal(err)
 	}
 	s, _ = step(t, s, DeclareCombio{Base: For("A")})
-	s = plainTurn(t, s, "B")
 	if s.Phase != PhaseFinished {
 		t.Fatalf("game did not finish: %s", s.Debug())
 	}

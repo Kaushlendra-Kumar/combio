@@ -106,9 +106,8 @@ type State struct {
 	PowerActor   PlayerID
 	KingPeek     *kingPeekState
 
-	Declared   bool
-	Declarer   PlayerID
-	FinalQueue []PlayerID // remaining final turns after a declaration
+	Declared bool
+	Declarer PlayerID
 
 	Paused       bool
 	Disconnected map[PlayerID]bool
@@ -145,7 +144,6 @@ func (s *State) clone() State {
 	}
 	n.Deck = append([]CardID(nil), s.Deck...)
 	n.Discard = append([]CardID(nil), s.Discard...)
-	n.FinalQueue = append([]PlayerID(nil), s.FinalQueue...)
 	n.RoundPending = append([]PlayerID(nil), s.RoundPending...)
 	n.Winners = append([]PlayerID(nil), s.Winners...)
 	n.Disconnected = map[PlayerID]bool{}

@@ -22,7 +22,24 @@ func main() {
 	seed := flag.Int64("seed", 0, "fixed deal seed for every room (0 = random per room)")
 	origins := flag.String("origins", "",
 		"comma-separated browser origins allowed to call the HTTP API (empty = any, for local dev)")
+
+	// Timer lengths, so a table can be tuned without a rebuild. The server
+	// still owns every transition; these only say how long it waits.
+	defaults := room.DefaultTimers()
+	turn := flag.Duration("turn-timer", defaults.Turn, "how long a player has to take their turn")
+	match := flag.Duration("match-timer", defaults.Match, "how long a matching window stays open")
+	matchExt := flag.Duration("match-extension", defaults.MatchExtension,
+		"extra time each accepted match adds to the window")
+	power := flag.Duration("power-timer", defaults.Power, "how long a power decision may take")
+	memory := flag.Duration("memory-timer", defaults.Memory, "how long the memory phase lasts")
+	reconnect := flag.Duration("reconnect-timer", defaults.Reconnect,
+		"how long a disconnected player has to come back")
 	flag.Parse()
+
+	timers := room.Timers{
+		Memory: *memory, Turn: *turn, Match: *match,
+		MatchExtension: *matchExt, Power: *power, Reconnect: *reconnect,
+	}
 
 	var allowed []string
 	if strings.TrimSpace(*origins) != "" {
@@ -37,7 +54,7 @@ func main() {
 
 	dev := auth.NewDevTokens()
 	rooms := room.NewManager(room.ManagerOptions{
-		Timers: room.DefaultTimers(),
+		Timers: timers,
 		Seed:   *seed,
 	})
 	srv := server.New(server.Options{
@@ -69,6 +86,9 @@ func main() {
 
 	go func() {
 		logger.Printf("listening on %s  (DEV AUTH: POST /auth/dev?name=You, then ws://host/ws?token=...)", *addr)
+		logger.Printf("timers: turn=%s match=%s(+%s) power=%s memory=%s reconnect=%s",
+			timers.Turn, timers.Match, timers.MatchExtension, timers.Power,
+			timers.Memory, timers.Reconnect)
 		if err := httpSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			logger.Fatalf("server: %v", err)
 		}

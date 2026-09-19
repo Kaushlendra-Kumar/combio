@@ -163,7 +163,6 @@ func TestForgedBaseCannotActWhilePausedOrFinished(t *testing.T) {
 		t.Fatal(err)
 	}
 	done, _ = step(t, done, DeclareCombio{Base: For("A")})
-	done = plainTurn(t, done, "B")
 	if done.Phase != PhaseFinished {
 		t.Fatalf("phase = %s", done.Phase)
 	}

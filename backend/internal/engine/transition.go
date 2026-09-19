@@ -183,31 +183,12 @@ func (s *State) declare(a DeclareCombio) ([]Event, error) {
 	s.Declared = true
 	s.Declarer = p.ID
 	p.TurnsCompleted++
+
+	// Declaring ends the hand there and then: every layout is revealed, scored
+	// and the winner decided (§10). Nobody gets a turn after a declaration, so
+	// a declaration is a bet on the table exactly as it stands.
 	evs := []Event{EvCombioDeclared{Player: p.ID}}
-
-	n := len(s.Players)
-	s.FinalQueue = nil
-	for i := 1; i < n; i++ {
-		q := &s.Players[(p.Seat+i)%n]
-		if q.Active() {
-			s.FinalQueue = append(s.FinalQueue, q.ID)
-		}
-	}
-	more, err := s.startNextFinalTurn()
-	return append(evs, more...), err
-}
-
-func (s *State) startNextFinalTurn() ([]Event, error) {
-	for len(s.FinalQueue) > 0 {
-		next := s.FinalQueue[0]
-		s.FinalQueue = s.FinalQueue[1:]
-		if p := s.Player(next); p != nil && p.Active() {
-			s.TurnIdx = p.Seat
-			s.Phase = PhaseTurnStart
-			return []Event{EvTurnStarted{Player: next, FinalTurn: true}}, nil
-		}
-	}
-	return s.finish(), nil
+	return append(evs, s.finish()...), nil
 }
 
 func (s *State) draw(a DrawCard) ([]Event, error) {
@@ -730,10 +711,6 @@ func (s *State) endTurn(counted bool) ([]Event, error) {
 	if s.ActiveCount() <= 1 {
 		return append(evs, s.finish()...), nil
 	}
-	if s.Declared {
-		more, err := s.startNextFinalTurn()
-		return append(evs, more...), err
-	}
 	n := len(s.Players)
 	for i := 1; i <= n; i++ {
 		idx := (s.TurnIdx + i) % n
@@ -903,15 +880,6 @@ func (s *State) removePlayer(a RemovePlayer) ([]Event, error) {
 	if !s.Declared && owed {
 		s.startRound()
 	}
-
-	// Drop them from the final-turn queue if a declaration is running.
-	q := s.FinalQueue[:0]
-	for _, id := range s.FinalQueue {
-		if id != p.ID {
-			q = append(q, id)
-		}
-	}
-	s.FinalQueue = q
 
 	evs := []Event{EvPlayerRemoved{Player: p.ID, CardsToBottom: len(sunk)}}
 	if len(s.Disconnected) == 0 && s.Paused {

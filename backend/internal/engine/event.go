@@ -51,9 +51,8 @@ type EvMemoryPhaseEnded struct {
 func (EvMemoryPhaseEnded) EventName() string { return "memory_phase_ended" }
 
 type EvTurnStarted struct {
-	pub       `json:"-"`
-	Player    PlayerID `json:"player"`
-	FinalTurn bool     `json:"final_turn"`
+	pub    `json:"-"`
+	Player PlayerID `json:"player"`
 }
 
 func (EvTurnStarted) EventName() string { return "turn_started" }

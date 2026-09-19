@@ -228,9 +228,9 @@ func TestForfeitedTurnDoesNotCount(t *testing.T) {
 	assertGate(t, s, false, "after a mid-turn forfeit")
 }
 
-// Removal during the final-turn sequence must not disturb round accounting or
-// reopen declaration.
-func TestRemovalDuringFinalTurnsDoesNotTouchTheGate(t *testing.T) {
+// A declaration ends the hand, so there is no post-declaration window in which
+// round accounting could still be disturbed.
+func TestDeclarationEndsTheHandSoTheGateStopsMattering(t *testing.T) {
 	s := fourHanded(t)
 	for i := 0; i < 2; i++ {
 		for _, p := range []PlayerID{"A", "B", "C", "D"} {
@@ -239,16 +239,16 @@ func TestRemovalDuringFinalTurnsDoesNotTouchTheGate(t *testing.T) {
 	}
 	rounds := s.RoundsCompleted
 	s, _ = step(t, s, DeclareCombio{Base: For("A")})
-	s = drop(t, s, "C") // C was waiting for a final turn
+
+	if s.Phase != PhaseFinished {
+		t.Fatalf("phase = %s", s.Phase)
+	}
 	if s.RoundsCompleted != rounds {
-		t.Fatalf("final-turn removal changed RoundsCompleted: %d -> %d", rounds, s.RoundsCompleted)
+		t.Fatalf("declaring moved the round counter: %d -> %d", rounds, s.RoundsCompleted)
 	}
-	rejects(t, s, DeclareCombio{Base: For("B")}, ErrAlreadyDeclared)
-	for _, id := range s.RoundPending {
-		if id == "C" {
-			t.Fatal("a removed player must not linger in the pending set")
-		}
-	}
+	// Nothing at all can follow.
+	rejects(t, s, DeclareCombio{Base: For("B")}, ErrGameOver)
+	rejects(t, s, PlayerDisconnected{Base: For("C")}, ErrGameOver)
 }
 
 // The gate is a latch: once two rounds are genuinely complete, later removals

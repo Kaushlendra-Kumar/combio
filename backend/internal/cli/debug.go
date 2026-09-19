@@ -24,9 +24,6 @@ func DebugDump(s *engine.State) string {
 	if s.Drawn != engine.NoCard {
 		fmt.Fprintf(&b, "drawn=%s by %s\n", card(s, s.Drawn), s.DrawnBy)
 	}
-	if len(s.FinalQueue) > 0 {
-		fmt.Fprintf(&b, "final turn queue=%v\n", s.FinalQueue)
-	}
 
 	fmt.Fprintf(&b, "deck (%d, top last): %s\n", len(s.Deck), cards(s, s.Deck))
 	fmt.Fprintf(&b, "discard (%d, bottom first): %s\n", len(s.Discard), cards(s, s.Discard))

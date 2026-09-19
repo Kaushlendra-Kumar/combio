@@ -27,7 +27,6 @@ function view(over: Partial<PlayerView> = {}): PlayerView {
     opponents: [],
     turn_player: "u1",
     my_turn: true,
-    final_turns: false,
     deck_count: 30,
     discard_count: 2,
     discard_top: { id: 99, rank: 8, suit: 1, deck: 0 },
@@ -181,15 +180,16 @@ describe("table state", () => {
     assertNoFaceLeak(container);
   });
 
-  it("announces the final-turn sequence and who declared", () => {
+  it("names whose turn it is, without a final-turn banner", () => {
     render(
       <TurnIndicator
-        view={view({ final_turns: true, declared: true, declarer: "u2", my_turn: false, turn_player: "u2" })}
+        view={view({ my_turn: false, turn_player: "u2" })}
         nameOf={(id) => (id === "u2" ? "Bo" : "you")}
       />,
     );
-    expect(screen.getByText(/Final turns/)).toBeInTheDocument();
-    expect(screen.getByText(/Bo declared/)).toBeInTheDocument();
+    expect(screen.getByText(/Bo's turn/)).toBeInTheDocument();
+    // Declaring settles the hand, so there is no such thing as a final turn.
+    expect(screen.queryByText(/Final turn/i)).not.toBeInTheDocument();
   });
 
   it("shows the paused badge when the server says so", () => {

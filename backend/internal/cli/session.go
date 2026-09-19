@@ -328,7 +328,7 @@ func (s *Session) turn() {
 	switch s.io.Choose(" your move", opts) {
 	case "c":
 		if _, ok := s.apply(engine.DeclareCombio{Base: engine.For(cur.ID)}); ok {
-			s.io.Printf("\n *** %s declares COMBIO! Everyone else gets one final turn. ***\n", cur.Name)
+			s.io.Printf("\n *** %s declares COMBIO! Cards down \u2014 that settles it. ***\n", cur.Name)
 		}
 		s.handBack(cur)
 	case "x":

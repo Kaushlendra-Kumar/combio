@@ -88,7 +88,6 @@ export interface PlayerView {
 
   turn_player: PlayerId;
   my_turn: boolean;
-  final_turns: boolean;
 
   deck_count: number;
   discard_count: number;

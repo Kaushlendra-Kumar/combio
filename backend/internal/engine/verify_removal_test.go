@@ -256,126 +256,56 @@ func TestStackedPenaltiesAppendInAccumulatedTrayOrder(t *testing.T) {
 
 // ---- 5 & 6. declarer and queue removals during final turns ----
 
-func TestDeclarerRemovedDuringFinalTurns(t *testing.T) {
-	s, err := BuildScenario(Scenario{
-		Players:    []PlayerID{"A", "B", "C"},
-		Hands:      map[PlayerID][]string{"A": {"AS", "2D"}, "B": {"5D"}, "C": {"5C"}},
-		Deck:       []string{"2C", "3D", "4H", "6S"},
-		DiscardTop: "9H",
-		Unlocked:   true,
-	})
-	if err != nil {
-		t.Fatal(err)
+// Removal matters right up to the moment someone declares, and not after. The
+// pre-declaration cases are covered above; this pins the boundary.
+func TestRemovalMattersUntilTheDeclarationAndNotAfter(t *testing.T) {
+	build := func(t *testing.T) State {
+		t.Helper()
+		st, err := BuildScenario(Scenario{
+			Players:    []PlayerID{"A", "B", "C"},
+			Hands:      map[PlayerID][]string{"A": {"AS"}, "B": {"5D"}, "C": {"5C"}},
+			Deck:       []string{"2C", "3D", "4H", "6S"},
+			DiscardTop: "9H",
+			Unlocked:   true,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return st
 	}
+
+	// Before: removing a player takes them out of contention entirely, and
+	// their cards sink to the bottom of the pile.
+	s := build(t)
 	total := len(s.Cards)
-	s, _ = step(t, s, DeclareCombio{Base: For("A")})
-	aCards := append([]CardID(nil), s.Player("A").Layout.Cards()...)
-
-	s, _ = step(t, s, PlayerDisconnected{Base: For("A")})
-	if !s.Paused {
-		t.Fatal("the game must pause even during final turns")
-	}
-	s = drop(t, s, "A")
-
-	if !s.Declared || s.Declarer != "A" {
-		t.Fatal("the declaration must stand")
-	}
-	// A's cards sank to the bottom, unrevealed.
-	for i, id := range aCards {
+	theirs := append([]CardID(nil), s.Player("C").Layout.Cards()...)
+	s, _ = step(t, s, PlayerDisconnected{Base: For("C")})
+	s, _ = step(t, s, RemovePlayer{Base: For("C")})
+	for i, id := range theirs {
 		if s.Discard[i] != id {
-			t.Fatalf("A's card %d is not at discard bottom position %d", id, i)
+			t.Fatalf("C's card %d is not at discard bottom slot %d", id, i)
 		}
 	}
-	if len(s.Cards) != total {
-		t.Fatal("conservation broken")
-	}
-
-	// B and C still get exactly one final turn each.
-	if s.CurrentID() != "B" {
-		t.Fatalf("B should be on their final turn, got %s", s.CurrentID())
-	}
-	s = plainTurn(t, s, "B")
-	if s.Phase == PhaseFinished {
-		t.Fatal("C has not had their final turn")
-	}
-	if s.CurrentID() != "C" {
-		t.Fatalf("expected C, got %s", s.CurrentID())
-	}
-	s = plainTurn(t, s, "C")
-	if s.Phase != PhaseFinished {
-		t.Fatalf("phase = %s", s.Phase)
-	}
-
-	if _, scored := s.Scores["A"]; scored {
-		t.Fatal("a removed declarer must not be scored")
+	s, _ = step(t, s, DeclareCombio{Base: For("A")})
+	if _, scored := s.Scores["C"]; scored {
+		t.Fatal("a removed player was scored")
 	}
 	if len(s.Scores) != 2 {
-		t.Fatalf("only the remaining players are scored, got %d", len(s.Scores))
+		t.Fatalf("expected two scored players, got %v", s.Scores)
 	}
-	for _, w := range s.Winners {
-		if w == "A" {
-			t.Fatal("a removed declarer cannot win")
-		}
+	if len(s.Cards) != total {
+		t.Fatal("cards were destroyed")
 	}
-	// B and C both held a 5: normal co-winner rules apply among the remainder.
-	if len(s.Winners) != 2 {
-		t.Fatalf("expected co-winners, got %v with scores %v", s.Winners, s.Scores)
+	if err := CheckInvariants(&s); err != nil {
+		t.Fatal(err)
 	}
-}
 
-func TestRemovingAPlayerWaitingForTheirFinalTurn(t *testing.T) {
-	s := fourHanded(t)
-	for i := 0; i < 2; i++ {
-		for _, p := range []PlayerID{"A", "B", "C", "D"} {
-			s = plainTurn(t, s, p)
-		}
-	}
-	s, _ = step(t, s, DeclareCombio{Base: For("A")}) // queue is B, C, D
-	if s.CurrentID() != "B" {
-		t.Fatalf("expected B, got %s", s.CurrentID())
-	}
-	// C is waiting in the queue and drops out.
-	s = drop(t, s, "C")
-
-	took := []PlayerID{}
-	for s.Phase != PhaseFinished {
-		cur := s.CurrentID()
-		took = append(took, cur)
-		s = plainTurn(t, s, cur)
-		if len(took) > 5 {
-			t.Fatal("the final queue stalled")
-		}
-	}
-	if len(took) != 2 || took[0] != "B" || took[1] != "D" {
-		t.Fatalf("final turns were %v, want exactly [B D]", took)
-	}
-	if _, ok := s.Scores["C"]; ok {
-		t.Fatal("C should not be scored")
-	}
-}
-
-func TestRemovingTheCurrentFinalTurnPlayerDoesNotSkipTheNext(t *testing.T) {
-	s := fourHanded(t)
-	for i := 0; i < 2; i++ {
-		for _, p := range []PlayerID{"A", "B", "C", "D"} {
-			s = plainTurn(t, s, p)
-		}
-	}
-	s, _ = step(t, s, DeclareCombio{Base: For("A")})
-	s = drop(t, s, "B") // B was mid-final-turn
-
-	if s.CurrentID() != "C" {
-		t.Fatalf("C should be next, got %s", s.CurrentID())
-	}
-	s = plainTurn(t, s, "C")
-	if s.CurrentID() != "D" {
-		t.Fatalf("D must not be skipped, got %s", s.CurrentID())
-	}
-	s = plainTurn(t, s, "D")
-	if s.Phase != PhaseFinished {
-		t.Fatalf("phase = %s", s.Phase)
-	}
-	if len(s.Scores) != 3 {
-		t.Fatalf("A, C and D should be scored, got %v", s.Scores)
+	// After: the hand is settled and a disconnect changes nothing.
+	after := build(t)
+	after, _ = step(t, after, DeclareCombio{Base: For("A")})
+	scores := len(after.Scores)
+	rejects(t, after, PlayerDisconnected{Base: For("C")}, ErrGameOver)
+	if len(after.Scores) != scores {
+		t.Fatal("the result changed after the hand was over")
 	}
 }

@@ -120,7 +120,7 @@ function describe(ev: WireEvent, nameOf: (id: string) => string): string | null 
     case "memory_phase_ended":
       return "Memory phase over \u2014 remember them.";
     case "turn_started":
-      return d.final_turn ? `Final turn: ${who("player")}` : `${who("player")}'s turn`;
+      return `${who("player")}'s turn`;
     case "declare_unlocked":
       return "Two rounds played \u2014 COMBIO is now available.";
     case "card_drawn":
@@ -150,7 +150,7 @@ function describe(ev: WireEvent, nameOf: (id: string) => string): string | null 
     case "power_skipped":
       return `${who("player")}'s power was not used.`;
     case "combio_declared":
-      return `\u2605 ${who("player")} declares COMBIO!`;
+      return `\u2605 ${who("player")} declares COMBIO \u2014 cards down!`;
     case "deck_reshuffled":
       return "Draw deck ran out \u2014 discard pile reshuffled.";
     case "turn_timed_out":

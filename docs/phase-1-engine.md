@@ -73,7 +73,7 @@ CheckInvariants(s *State)                       error
 | §10 two complete global rounds, historically | `RoundsCompleted` + `RoundPending` in `state.go`; `recordTurn` completes a round only on a real turn, `removePlayer` breaks and restarts one instead |
 | §10 a forfeited turn is not a played turn | `endTurn(counted bool)`; removal passes `false` |
 | §10 availability is timing-only | `declare` and `PlayerView.DeclareAvailable` never read a score |
-| §10 final turns, declarer still targetable | `FinalQueue`; matching guards check `Active()`, not "is the declarer" |
+| §10 a declaration ends the hand at once | `declare()` calls `finish()` directly — no queue, no further turns |
 | §11 strict-lower rule, co-winners on tie | `DetermineWinners` over an ordered `[]ScoreEntry` (deterministic, map-free) |
 | §12 pause on disconnect, all timers frozen | `dispatch` returns `ErrPaused` for everything except connection actions (timers included) |
 | §12 removal sinks cards to the discard **bottom** | `removePlayer` → `sinkToBottom`; nothing is ever deleted |
@@ -167,7 +167,7 @@ types.
 no removals, the review's own A→B→C→D scenario, an 8-case removal matrix
 (before round 1, during round 1, during round 2, immediately before the removed
 player's own turn, and a player who had already played that round), forfeited
-turns not counting, removal during final turns not touching the gate, and the
+turns not counting, a declaration ending the hand so the gate stops mattering, and the
 gate never closing once open.
 
 `verify_removal_test.go` — deterministic sink order for layout/drawn and
@@ -175,12 +175,11 @@ layout/tray; disconnect during a live matching window (rank, phase and extension
 counter preserved across the pause, no window or reveal created by sinking, B's
 cards stale-but-free afterwards, matching resumes); four penalty cards
 accumulating across two failed attempts and appending in tray order; declarer
-removed mid-final-turns (declaration stands, cards sink, only survivors scored,
-co-winner rules apply); a queued player removed from the final queue; and the
-current final-turn player removed without skipping the next.
+removal mattering right up to the declaration and not after (cards sink, only
+survivors scored, and a finished hand is immune to a disconnect).
 
-`verify_purity_test.go` — a final-turn opponent match rewriting the declarer's
-layout and score (7 → 12) so the declaration fails; a Jack-revealed card moving
+`verify_purity_test.go` — the declared score being the final score (A declares
+on 7 against 16 and it stands, because nothing can follow); a Jack-revealed card moving
 through a Queen swap with no reveal residue in any view, event or state;
 deterministic terminal paths for successful, failed, tied, zero-card and
 co-winner endings; and two randomness-purity tests proving that a barrage of
@@ -190,7 +189,7 @@ on an untouched state.
 The 21 scripted games now assert their own coverage rather than assuming it, and
 verify that each revealed hand sums to the score it was given. They cover
 successful declarations, failed declarations, an Ace counted as −1 in a real
-final score, matching during the final-turn sequence, and deck exhaustion. Paths
+final score, and deck exhaustion. Paths
 they do not reliably reach — declarer ties, zero-card declarers, co-winners,
 negative totals — have deterministic tests of their own.
 
@@ -209,7 +208,7 @@ irrelevance · all four powers · every zero-card fizzle case · mandatory vs
 optional powers · power timeout · a physical King tracked through Jack → Queen
 swap → King swap and then targeted · the two-round global gate opening exactly
 at round 3 · declaration timing restrictions · declaration never score-gated ·
-final turns · declarer still targetable · all nine winner rows including
+a declaration settling the hand at once · all nine winner rows including
 co-winners and Ace arithmetic · disconnect pause freezing timers · frozen drawn
 card surviving a reconnect · removal sinking cards to the pile bottom ·
 conservation across removal · sunk cards returning through the reshuffle ·

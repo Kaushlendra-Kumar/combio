@@ -32,7 +32,7 @@ func TestAllScenariosPass(t *testing.T) {
 	for _, want := range []string{
 		"matching-race", "wrong-match", "multi-match", "opponent-transfer",
 		"power-10", "power-jack", "power-queen", "power-king", "zero-card",
-		"combio-success", "combio-failure", "declarer-tie", "final-turn-targeting",
+		"combio-success", "combio-failure", "declarer-tie", "declaration-is-final",
 		"disconnect", "reshuffle", "unlock-interrupted",
 	} {
 		if !seen[want] {

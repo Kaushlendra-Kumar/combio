@@ -17,12 +17,11 @@ import (
 type Status string
 
 const (
-	StatusWaiting    Status = "WAITING"
-	StatusReady      Status = "READY"
-	StatusStarting   Status = "STARTING"
-	StatusPlaying    Status = "PLAYING"
-	StatusFinalTurns Status = "FINAL_TURNS"
-	StatusFinished   Status = "FINISHED"
+	StatusWaiting  Status = "WAITING"
+	StatusReady    Status = "READY"
+	StatusStarting Status = "STARTING"
+	StatusPlaying  Status = "PLAYING"
+	StatusFinished Status = "FINISHED"
 )
 
 var (
@@ -588,8 +587,6 @@ func (r *Room) refreshStatus() {
 	switch {
 	case r.st.Phase == engine.PhaseFinished:
 		r.status = StatusFinished
-	case r.st.Declared:
-		r.status = StatusFinalTurns
 	case r.st.Phase == engine.PhaseMemory:
 		r.status = StatusStarting
 	default:

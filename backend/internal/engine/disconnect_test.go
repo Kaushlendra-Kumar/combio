@@ -140,7 +140,9 @@ func TestRemovingTheCurrentPlayerPassesTheTurn(t *testing.T) {
 	}
 }
 
-func TestRemovingTheDeclarerKeepsTheDeclaration(t *testing.T) {
+// A declaration settles the hand before a disconnect can matter: once the game
+// is finished, connection changes are refused outright.
+func TestAFinishedHandCannotBeDisturbedByADisconnect(t *testing.T) {
 	s, err := BuildScenario(Scenario{
 		Players:    []PlayerID{"A", "B", "C"},
 		Hands:      map[PlayerID][]string{"A": {"AS"}, "B": {"5D"}, "C": {"7H"}},
@@ -152,23 +154,20 @@ func TestRemovingTheDeclarerKeepsTheDeclaration(t *testing.T) {
 		t.Fatal(err)
 	}
 	s, _ = step(t, s, DeclareCombio{Base: For("A")})
-	s, _ = step(t, s, PlayerDisconnected{Base: For("A")})
-	s, _ = step(t, s, RemovePlayer{Base: For("A")})
-	if !s.Declared {
-		t.Fatal("the declaration must stand after the declarer is removed")
-	}
-	s = plainTurn(t, s, "B")
-	s = plainTurn(t, s, "C")
 	if s.Phase != PhaseFinished {
-		t.Fatalf("final turns should still complete, phase=%s", s.Phase)
+		t.Fatalf("phase = %s", s.Phase)
 	}
-	for _, w := range s.Winners {
-		if w == "A" {
-			t.Fatal("a removed declarer cannot win")
-		}
+	winners := append([]PlayerID(nil), s.Winners...)
+
+	for _, a := range []Action{
+		PlayerDisconnected{Base: For("A")},
+		PlayerReconnected{Base: For("B")},
+		RemovePlayer{Base: For("C")},
+	} {
+		rejects(t, s, a, ErrGameOver)
 	}
-	if len(s.Winners) != 1 || s.Winners[0] != "B" {
-		t.Fatalf("B held the 5 and should win, winners=%v", s.Winners)
+	if len(s.Winners) != len(winners) || s.Winners[0] != winners[0] {
+		t.Fatal("the result changed after the hand was over")
 	}
 }
 
