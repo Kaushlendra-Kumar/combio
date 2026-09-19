@@ -159,6 +159,7 @@ export const C = {
   StartGame: "start_game",
   Action: "action",
   Reconnect: "reconnect",
+  Rematch: "rematch",
   ListRooms: "list_rooms",
   Ping: "ping",
 } as const;

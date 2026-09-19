@@ -12,7 +12,6 @@ import {
 import { CombioButton, ScoreBoard } from "@/components/game/Panels";
 import { ConnectionStatus } from "@/components/common/ConnectionStatus";
 import { ErrorBanner } from "@/components/common/ErrorBanner";
-import type { Actions } from "@/lib/store";
 import type { OpponentView, PlayerView } from "@/lib/protocol";
 
 function view(over: Partial<PlayerView> = {}): PlayerView {
@@ -200,11 +199,11 @@ describe("table state", () => {
 });
 
 describe("COMBIO and results", () => {
-  it("the button is a plain send, with no local eligibility logic", () => {
-    const declareCombio = vi.fn();
-    render(<CombioButton actions={{ declareCombio } as unknown as Actions} />);
+  it("the button just reports the click; eligibility is the server's", () => {
+    const onDeclare = vi.fn();
+    render(<CombioButton onDeclare={onDeclare} />);
     screen.getByRole("button", { name: /Declare COMBIO/ }).click();
-    expect(declareCombio).toHaveBeenCalledOnce();
+    expect(onDeclare).toHaveBeenCalledOnce();
   });
 
   it("renders the final scores the server sent, marking the winners", () => {
@@ -249,5 +248,48 @@ describe("connection and errors", () => {
     expect(onDismiss).toHaveBeenCalledOnce();
     rerender(<ErrorBanner notice={null} onDismiss={onDismiss} />);
     expect(container).toBeEmptyDOMElement();
+  });
+});
+
+describe("play again", () => {
+  const finished = view({
+    finished: true,
+    declared: true,
+    declarer: "u1",
+    scores: { u1: 12, u2: 3 },
+    winners: ["u2"],
+    reveal: {},
+  });
+
+  it("offers a rematch that keeps everyone in the room", () => {
+    const onRematch = vi.fn();
+    const onLeave = vi.fn();
+    render(
+      <ScoreBoard view={finished} nameOf={(id) => id} onLeave={onLeave} onRematch={onRematch} />,
+    );
+    screen.getByRole("button", { name: /Play again/ }).click();
+    expect(onRematch).toHaveBeenCalledOnce();
+    expect(onLeave).not.toHaveBeenCalled();
+    expect(screen.getByText(/keeps everyone here/)).toBeInTheDocument();
+  });
+
+  it("leaving is a separate, explicit choice", () => {
+    const onLeave = vi.fn();
+    render(<ScoreBoard view={finished} nameOf={(id) => id} onLeave={onLeave} onRematch={vi.fn()} />);
+    screen.getByRole("button", { name: /Leave the room/ }).click();
+    expect(onLeave).toHaveBeenCalledOnce();
+  });
+
+  it("only the host can deal the next hand", () => {
+    render(
+      <ScoreBoard
+        view={finished}
+        nameOf={(id) => id}
+        onLeave={vi.fn()}
+        onRematch={vi.fn()}
+        canRematch={false}
+      />,
+    );
+    expect(screen.getByRole("button", { name: /Play again/ })).toBeDisabled();
   });
 });

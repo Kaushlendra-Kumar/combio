@@ -603,3 +603,126 @@ func TestReshuffleWorksAcrossARealMultiplayerGame(t *testing.T) {
 		t.Logf("%d players (%d deck): reshuffled and continued cleanly", players, wantDecks)
 	}
 }
+
+// ---------- rematch ----------
+
+// A finished table can play again without everyone re-sharing the code.
+func TestRematchReturnsTheSameTableToTheLobby(t *testing.T) {
+	tb := newTable(t, 3, 4, 7)
+	tb.startGame(t)
+	tb.finishMemory(t)
+
+	// Play until the game ends.
+	for i := 0; i < 80 && tb.room.Snapshot().Status != StatusFinished; i++ {
+		cur := string(tb.currentPlayer())
+		var unlocked bool
+		tb.stateOf(func(s *engine.State) { unlocked = s.DeclareUnlocked() })
+		if unlocked && tb.phase() == "turn_start" && tb.room.Snapshot().Status != StatusFinalTurns {
+			tb.act(cur, protocol.ADeclareCombio, nil)
+			continue
+		}
+		tb.playPlainTurn(t, cur)
+	}
+	if tb.room.Snapshot().Status != StatusFinished {
+		t.Fatalf("the game never finished: %+v", tb.room.Snapshot())
+	}
+
+	// A rematch before the game is over is refused.
+	before := newTable(t, 2, 4, 7)
+	before.room.Rematch(before.clients[0].id, "r")
+	before.settle()
+	if before.client(string(before.clients[0].id)).lastErrorCode() == "" {
+		t.Fatal("a rematch should be refused while a game is unfinished")
+	}
+
+	// And an outsider cannot trigger one.
+	tb.room.Rematch("ghost", "r")
+	tb.settle()
+	if tb.room.Snapshot().Status != StatusFinished {
+		t.Fatal("an outsider reset the room")
+	}
+
+	tb.resetAll()
+	tb.room.Rematch(tb.clients[0].id, "r")
+	tb.settle()
+
+	info := tb.room.Snapshot()
+	if info.Status != StatusWaiting {
+		t.Fatalf("status after a rematch is %s, want WAITING", info.Status)
+	}
+	if len(info.Players) != 3 {
+		t.Fatalf("%d seats survived the rematch, want 3", len(info.Players))
+	}
+	for _, p := range info.Players {
+		if p.Ready {
+			t.Fatalf("%s is still marked ready", p.ID)
+		}
+		if p.Removed {
+			t.Fatalf("%s is still marked removed", p.ID)
+		}
+	}
+	if info.Started {
+		t.Fatal("the room should not be mid-game after a rematch")
+	}
+	// Everyone was told.
+	for _, c := range tb.clients {
+		if _, ok := c.last(protocol.SRoomState); !ok {
+			t.Fatalf("%s was not sent the new room state", c.id)
+		}
+	}
+
+	// The whole lobby flow works again, and deals a different game.
+	tb.readyAll()
+	if tb.room.Snapshot().Status != StatusReady {
+		t.Fatalf("status is %s, want READY", tb.room.Snapshot().Status)
+	}
+	tb.room.Start(tb.clients[0].id, "s")
+	tb.settle()
+	if tb.phase() != "memory" {
+		t.Fatalf("the rematch did not deal a new game, phase is %s", tb.phase())
+	}
+	tb.stateOf(func(s *engine.State) {
+		if err := engine.CheckInvariants(s); err != nil {
+			t.Fatal(err)
+		}
+		if len(s.Winners) != 0 || len(s.Scores) != 0 {
+			t.Fatal("the new game inherited the old result")
+		}
+	})
+}
+
+// A player whose connection died before the rematch loses their seat: nobody is
+// there to ready up.
+func TestRematchDropsDisconnectedSeats(t *testing.T) {
+	tb := newTable(t, 3, 4, 7)
+	tb.startGame(t)
+	tb.finishMemory(t)
+	for i := 0; i < 80 && tb.room.Snapshot().Status != StatusFinished; i++ {
+		cur := string(tb.currentPlayer())
+		var unlocked bool
+		tb.stateOf(func(s *engine.State) { unlocked = s.DeclareUnlocked() })
+		if unlocked && tb.phase() == "turn_start" && tb.room.Snapshot().Status != StatusFinalTurns {
+			tb.act(cur, protocol.ADeclareCombio, nil)
+			continue
+		}
+		tb.playPlainTurn(t, cur)
+	}
+	if tb.room.Snapshot().Status != StatusFinished {
+		t.Skip("the game did not finish for this deal")
+	}
+
+	tb.room.Disconnected(tb.clients[2].id)
+	tb.settle()
+	tb.room.Rematch(tb.clients[0].id, "r")
+	tb.settle()
+
+	info := tb.room.Snapshot()
+	if len(info.Players) != 2 {
+		t.Fatalf("%d seats survived, want 2", len(info.Players))
+	}
+	for _, p := range info.Players {
+		if p.ID == tb.clients[2].id {
+			t.Fatal("a disconnected seat survived the rematch")
+		}
+	}
+}

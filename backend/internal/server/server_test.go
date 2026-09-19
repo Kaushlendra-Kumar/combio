@@ -205,6 +205,31 @@ func (c *client) await(typ string) protocol.ServerMessage {
 	return protocol.ServerMessage{}
 }
 
+// awaitRoomStatus consumes frames until the room reports the wanted status.
+//
+// Readying up and starting are separate round trips, so a test must wait for
+// the server to agree the room is READY before pressing start. Firing both
+// back to back races the room loop and fails intermittently on a slower box.
+func (c *client) awaitRoomStatus(status string) protocol.RoomStateData {
+	c.t.Helper()
+	for i := 0; i < 200; i++ {
+		m, ok := c.next()
+		if !ok {
+			break
+		}
+		if m.Type != protocol.SRoomState {
+			continue
+		}
+		var rs protocol.RoomStateData
+		c.into(m, &rs)
+		if rs.Status == status {
+			return rs
+		}
+	}
+	c.t.Fatalf("room never reached %s; got:\n%s", status, strings.Join(c.frames(), "\n"))
+	return protocol.RoomStateData{}
+}
+
 // awaitEvent consumes frames until an events frame contains the named event.
 func (c *client) awaitEvent(name string) {
 	c.t.Helper()

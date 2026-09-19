@@ -53,6 +53,7 @@ const (
 	CStartGame  = "start_game"
 	CAction     = "action"
 	CReconnect  = "reconnect"
+	CRematch    = "rematch"
 	CListRooms  = "list_rooms"
 	CPing       = "ping"
 )

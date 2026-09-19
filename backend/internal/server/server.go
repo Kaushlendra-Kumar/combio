@@ -393,6 +393,13 @@ func (s *session) handle(m protocol.ClientMessage) {
 			s.fail(m.ID, room.ErrNotInRoom)
 		}
 
+	case protocol.CRematch:
+		if r := s.currentRoom(); r != nil {
+			r.Rematch(s.id.PlayerID, m.ID)
+		} else {
+			s.fail(m.ID, room.ErrNotInRoom)
+		}
+
 	case protocol.CAction:
 		var d protocol.ActionData
 		if err := decode(m.Data, &d); err != nil {

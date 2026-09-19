@@ -259,9 +259,17 @@ function applyServer(state: GameState, msg: ServerMessage): GameState {
         session: { playerId: msg.data.player_id, name: msg.data.name },
       };
 
-    case S.RoomState:
+    case S.RoomState: {
       // Replaces the roster wholesale: the server's list is the list.
-      return { ...state, room: msg.data, reconnectRequired: null };
+      const next = { ...state, room: msg.data, reconnectRequired: null };
+      // WAITING or READY means there is no game in progress. After a rematch
+      // that is how the server tells us the finished game is over, so the old
+      // view and its reveals have to go with it.
+      if (msg.data.status === "WAITING" || msg.data.status === "READY") {
+        return { ...next, view: null, started: false, pendingReveals: [] };
+      }
+      return next;
+    }
 
     case S.PlayerJoined:
       return { ...state, feed: pushFeed(state.feed, `${msg.data.name} joined.`) };

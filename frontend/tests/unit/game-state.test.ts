@@ -265,3 +265,62 @@ describe("selectors", () => {
     expect(playerName(s, "ghost")).toBe("ghost");
   });
 });
+
+describe("rematch", () => {
+  it("clears the finished game when the room returns to the lobby", () => {
+    let s = withSession();
+    s = reduce(s, srv({ v: 1, type: "state_update", data: { view: view({ finished: true }) } }));
+    s = reduce(
+      s,
+      srv({
+        v: 1,
+        type: "events",
+        data: { events: [{ name: "private_draw", data: { card: { id: 7, rank: 12, suit: 2, deck: 0 } } }] },
+      }),
+    );
+    expect(s.view).not.toBeNull();
+    expect(s.pendingReveals).toHaveLength(1);
+
+    const lobby = {
+      code: "ABCD",
+      public: true,
+      status: "WAITING" as const,
+      cards_per_player: 4,
+      max_players: 8,
+      players: [
+        { id: "u1", name: "Ann", ready: false, connected: true, removed: false, host: true },
+      ],
+    };
+    s = reduce(s, srv({ v: 1, type: "room_state", data: lobby }));
+
+    // The old hand is gone, not merged into the next one.
+    expect(s.view).toBeNull();
+    expect(s.started).toBe(false);
+    expect(s.pendingReveals).toHaveLength(0);
+    expect(s.room?.status).toBe("WAITING");
+  });
+
+  it("does not clear a running game on a routine room_state", () => {
+    let s = withSession();
+    s = reduce(s, srv({ v: 1, type: "state_update", data: { view: view() } }));
+    s = reduce(
+      s,
+      srv({
+        v: 1,
+        type: "room_state",
+        data: {
+          code: "ABCD",
+          public: true,
+          status: "PLAYING",
+          cards_per_player: 4,
+          max_players: 8,
+          players: [
+            { id: "u1", name: "Ann", ready: true, connected: true, removed: false, host: true },
+          ],
+        },
+      }),
+    );
+    expect(s.view).not.toBeNull();
+    expect(s.started).toBe(true);
+  });
+});

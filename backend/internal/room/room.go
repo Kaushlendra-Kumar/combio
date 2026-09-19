@@ -33,6 +33,7 @@ var (
 	ErrNotReady       = errors.New("every player must be ready, and there must be at least two")
 	ErrAlreadyStarted = errors.New("the game has already started")
 	ErrNotInRoom      = errors.New("you are not in this room")
+	ErrNotFinished    = errors.New("the game is not over yet")
 	ErrRoomClosed     = errors.New("room is closed")
 )
 
@@ -58,8 +59,13 @@ type Timers struct {
 
 func DefaultTimers() Timers {
 	return Timers{
-		Memory:         60 * time.Second,
-		Turn:           30 * time.Second,
+		Memory: 60 * time.Second,
+		// A minute per turn. Phase 0 specified 30s, which is fine at a table
+		// where you can see the cards in front of you; in a browser you have to
+		// read the board, click, and think about what you remember, so 30s runs
+		// out mid-decision. Raising it changes no rule: the server still owns
+		// the transition and still forces a legal move when it lapses.
+		Turn:           60 * time.Second,
 		Match:          5 * time.Second,
 		MatchExtension: 2 * time.Second,
 		Power:          15 * time.Second,
@@ -123,6 +129,9 @@ type Room struct {
 	phaseTimer       *scheduled
 	timerGen         uint64
 	extensionPending bool
+	// games counts how many hands this room has dealt, so a rematch gets a
+	// different deal while the first game of a seeded room stays reproducible.
+	games int
 
 	reconnect    map[engine.PlayerID]Stopper
 	reconnectGen map[engine.PlayerID]uint64
@@ -252,6 +261,10 @@ func (r *Room) SetReady(id engine.PlayerID, ready bool, cid string) {
 }
 
 func (r *Room) Start(id engine.PlayerID, cid string) { r.do(func() { r.start(id, cid) }) }
+
+// Rematch puts a finished room back into the lobby with the same people in it,
+// so a table can play again without everyone re-sharing the code.
+func (r *Room) Rematch(id engine.PlayerID, cid string) { r.do(func() { r.rematch(id, cid) }) }
 
 // Act is the only way a gameplay action enters the room. The actor is supplied
 // by the caller from the authenticated connection; nothing in data can change
@@ -399,7 +412,7 @@ func (r *Room) start(id engine.PlayerID, cid string) {
 	st, evs, err := engine.NewGame(
 		engine.Config{CardsPerPlayer: r.cfg.CardsPerPlayer},
 		ids,
-		engine.NewSeededShuffler(r.cfg.Seed),
+		engine.NewSeededShuffler(r.cfg.Seed+int64(r.games)),
 	)
 	if err != nil {
 		r.sendTo(id, protocol.Error(cid, err))
@@ -407,6 +420,7 @@ func (r *Room) start(id engine.PlayerID, cid string) {
 	}
 	r.st = st
 	r.started = true
+	r.games++
 	r.status = StatusStarting
 	r.broadcastMsg(protocol.Msg(protocol.SGameStarted, protocol.GameStartedData{
 		CardsPerPlayer: r.cfg.CardsPerPlayer,
@@ -416,6 +430,49 @@ func (r *Room) start(id engine.PlayerID, cid string) {
 	r.noteEvents(evs)
 	r.broadcast(evs)
 	r.syncTimers()
+}
+
+// rematch discards the finished game and returns to the lobby.
+//
+// Seats are kept, ready flags cleared, and anyone the last game removed is
+// welcome back. Players whose socket has gone are dropped, since nobody is
+// there to ready up. Nothing about the engine changes: the next Start deals an
+// entirely new game.
+func (r *Room) rematch(id engine.PlayerID, cid string) {
+	if r.seatOf(id) == nil {
+		r.sendTo(id, protocol.Error(cid, ErrNotInRoom))
+		return
+	}
+	if r.status != StatusFinished {
+		r.sendTo(id, protocol.Error(cid, ErrNotFinished))
+		return
+	}
+
+	r.stopPhaseTimer()
+	for pid := range r.reconnect {
+		r.cancelReconnect(pid)
+	}
+
+	kept := r.seats[:0]
+	for _, s := range r.seats {
+		if s.client == nil {
+			continue
+		}
+		s.ready = false
+		s.removed = false
+		kept = append(kept, s)
+	}
+	r.seats = kept
+	if r.seatOf(r.host) == nil && len(r.seats) > 0 {
+		r.host = r.seats[0].id
+	}
+
+	r.started = false
+	r.st = engine.State{}
+	r.extensionPending = false
+
+	r.refreshStatus()
+	r.broadcastRoomState()
 }
 
 func (r *Room) act(actor engine.PlayerID, data protocol.ActionData, cid string) {

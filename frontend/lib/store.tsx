@@ -29,6 +29,8 @@ export interface Actions {
   leaveRoom(): void;
   setReady(ready: boolean): void;
   startGame(): void;
+  /** Return a finished table to the lobby with the same people in it. */
+  rematch(): void;
 
   inspectMemory(positions: number[]): void;
   drawCard(): void;
@@ -88,6 +90,7 @@ export function makeActions(getClient: () => GameClient | null, dispatch: LocalD
     },
     setReady: (ready) => raw.send(C.Ready, { ready }),
     startGame: () => raw.send(C.StartGame),
+    rematch: () => raw.send(C.Rematch),
 
     inspectMemory: (positions) => send(A.InspectMemory, { positions }),
     drawCard: () => send(A.DrawCard),

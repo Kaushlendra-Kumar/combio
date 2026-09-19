@@ -34,6 +34,7 @@ export function GameTable({ onLeave }: { onLeave: () => void }) {
   const [insertMode, setInsertMode] = useState(false);
   const [matchGive, setMatchGive] = useState<{ target: string; index: number } | null>(null);
   const [targetPrompt, setTargetPrompt] = useState<"power-target" | null>(null);
+  const [confirmCombio, setConfirmCombio] = useState(false);
 
   // Any authoritative update clears local selections: a half-made choice
   // against a layout that has since changed is meaningless.
@@ -48,8 +49,15 @@ export function GameTable({ onLeave }: { onLeave: () => void }) {
   }
 
   if (view.finished) {
+    const me = state.room?.players.find((p) => p.id === state.session?.playerId);
     return (
-      <ScoreBoard view={view} nameOf={(id) => playerName(state, id)} onLeave={onLeave} />
+      <ScoreBoard
+        view={view}
+        nameOf={(id) => playerName(state, id)}
+        onLeave={onLeave}
+        onRematch={() => actions.rematch()}
+        canRematch={me?.host ?? false}
+      />
     );
   }
 
@@ -136,6 +144,7 @@ export function GameTable({ onLeave }: { onLeave: () => void }) {
             setRemoveIndex={setRemoveIndex}
             insertMode={insertMode}
             setInsertMode={setInsertMode}
+            onDeclare={() => setConfirmCombio(true)}
           />
 
           <PowerPanel
@@ -148,7 +157,7 @@ export function GameTable({ onLeave }: { onLeave: () => void }) {
 
           {view.declare_available && view.phase === "turn_start" ? (
             <div className="flex justify-center">
-              <CombioButton actions={actions} />
+              <CombioButton onDeclare={() => setConfirmCombio(true)} />
             </div>
           ) : null}
         </div>
@@ -222,6 +231,32 @@ export function GameTable({ onLeave }: { onLeave: () => void }) {
             </p>
           </div>
         ) : null}
+      </Modal>
+
+      {/* declaring is irreversible, and the button sits next to Draw */}
+      <Modal
+        open={confirmCombio}
+        title="Declare COMBIO?"
+        onClose={() => setConfirmCombio(false)}
+        closeLabel="Cancel"
+      >
+        <p className="text-sm text-white/80">
+          You&apos;re betting that your total is lower than everyone else&apos;s. If you tie or
+          lose, your declaration fails and you cannot win the hand.
+        </p>
+        <p className="mt-2 text-xs text-white/50">
+          You give up the rest of your turn, and you can&apos;t take this back.
+        </p>
+        <button
+          type="button"
+          className="mt-4 w-full rounded-lg bg-rose-500 py-2 text-sm font-semibold text-white hover:bg-rose-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-300"
+          onClick={() => {
+            setConfirmCombio(false);
+            actions.declareCombio();
+          }}
+        >
+          Yes, declare COMBIO
+        </button>
       </Modal>
 
       {/* paused / reconnecting */}

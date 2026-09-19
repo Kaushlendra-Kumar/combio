@@ -77,6 +77,7 @@ export function TurnPanel({
   setRemoveIndex,
   insertMode,
   setInsertMode,
+  onDeclare,
 }: {
   view: PlayerView;
   actions: Actions;
@@ -84,6 +85,7 @@ export function TurnPanel({
   setRemoveIndex: (i: number | null) => void;
   insertMode: boolean;
   setInsertMode: (v: boolean) => void;
+  onDeclare?: () => void;
 }) {
   const drawn = view.my_drawn_card;
 
@@ -93,7 +95,7 @@ export function TurnPanel({
         <button type="button" className={primary} onClick={() => actions.drawCard()}>
           Draw a card
         </button>
-        {view.declare_available ? <CombioButton actions={actions} /> : null}
+        {view.declare_available && onDeclare ? <CombioButton onDeclare={onDeclare} /> : null}
       </div>
     );
   }
@@ -362,12 +364,16 @@ function OpponentPicker({
  * This button appears when and only when the server's view says
  * `declare_available`. The client does not know its own score and does not
  * count rounds — both would be re-implementing engine rules.
+ *
+ * It takes a plain handler rather than the action surface so the caller can put
+ * a confirmation in front of it: declaring is irreversible and sits next to the
+ * other turn buttons, which makes it easy to hit by accident.
  */
-export function CombioButton({ actions }: { actions: Actions }) {
+export function CombioButton({ onDeclare }: { onDeclare: () => void }) {
   return (
     <button
       type="button"
-      onClick={() => actions.declareCombio()}
+      onClick={onDeclare}
       className={`${btn} bg-rose-500 text-white hover:bg-rose-400`}
     >
       Declare COMBIO
@@ -379,10 +385,15 @@ export function ScoreBoard({
   view,
   nameOf,
   onLeave,
+  onRematch,
+  canRematch = true,
 }: {
   view: PlayerView;
   nameOf: (id: string) => string;
   onLeave: () => void;
+  /** Keeps everyone in this room and returns it to the lobby. */
+  onRematch?: () => void;
+  canRematch?: boolean;
 }) {
   const scores = view.scores ?? {};
   const winners = new Set(view.winners ?? []);
@@ -418,9 +429,28 @@ export function ScoreBoard({
           {winners.has(view.declarer) ? " and made it." : " and did not make it."}
         </p>
       ) : null}
-      <button type="button" onClick={onLeave} className={`${primary} w-full`}>
-        Back to the lobby
-      </button>
+      <div className="flex flex-col gap-2 sm:flex-row">
+        {onRematch ? (
+          <button
+            type="button"
+            onClick={onRematch}
+            disabled={!canRematch}
+            className={`${primary} flex-1`}
+            title={canRematch ? "" : "Only the host can start the next hand"}
+          >
+            Play again
+          </button>
+        ) : null}
+        <button type="button" onClick={onLeave} className={`${ghost} flex-1`}>
+          Leave the room
+        </button>
+      </div>
+      {onRematch ? (
+        <p className="text-center text-xs text-white/50">
+          Play again keeps everyone here and deals a fresh hand \u2014 no need to share the code
+          again.
+        </p>
+      ) : null}
     </div>
   );
 }
