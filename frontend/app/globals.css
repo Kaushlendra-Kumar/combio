@@ -24,3 +24,10 @@ body {
   outline: 2px solid #fcd34d;
   outline-offset: 2px;
 }
+
+/* An open dropdown's list is drawn by the browser on a white background, but
+   options inherit the select's white text, so the numbers vanish. */
+select option {
+  color: #111;
+  background-color: #fff;
+}

@@ -11,6 +11,6 @@
   "vars": {
     // Comma-separated frontend origins, e.g. "https://combio.vercel.app".
     // Empty allows any origin (fine for local development).
-    "ALLOWED_ORIGINS": ""
+    "ALLOWED_ORIGINS": "https://combio-kappa.vercel.app"
   }
 }
