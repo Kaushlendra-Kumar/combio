@@ -1,0 +1,16 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "combio-backend",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-10-01",
+  "durable_objects": {
+    "bindings": [{ "name": "GAME", "class_name": "GameServer" }]
+  },
+  // SQLite-backed Durable Objects are what the Workers free plan offers.
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["GameServer"] }],
+  "vars": {
+    // Comma-separated frontend origins, e.g. "https://combio.vercel.app".
+    // Empty allows any origin (fine for local development).
+    "ALLOWED_ORIGINS": ""
+  }
+}
